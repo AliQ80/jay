@@ -62,7 +62,7 @@ elif $has_jj && ! $has_git; then
   jj st
   echo
 
-  action=$(gum choose "commit" "squash" "abandon" --header "Choose your action:")
+  action=$(gum choose "commit" "squash" "abandon" "branch" --header "Choose your action:")
 
   case "$action" in
   commit)
@@ -104,6 +104,17 @@ elif $has_jj && ! $has_git; then
         '==> Abandoned current work'
     fi
     ;;
+  branch)
+    if gum confirm "Do you want to create a new branch?"; then
+      BOOKMARK=$(gum input --placeholder "Name your brnach")
+      jj new @-
+      jj bookmark create "$BOOKMARK" -r @-
+      gum style \
+        --foreground 121 \
+        --align left --width 40 --margin "2 2" \
+        '==> Created a new branch'
+    fi
+    ;;
   *)
     echo "No action taken!"
     ;;
@@ -117,7 +128,7 @@ elif $has_jj && $has_git; then
   jj st
   echo
 
-  action=$(gum choose "commit" "squash" "abandon" "branch" --header "Choose your action:")
+  action=$(gum choose "commit" "squash" "abandon" --header "Choose your action:")
 
   case "$action" in
   commit)
@@ -163,17 +174,6 @@ elif $has_jj && $has_git; then
         --foreground 121 \
         --align left --width 40 --margin "2 2" \
         '==> Abandoned current work'
-    fi
-    ;;
-  branch)
-    if gum confirm "Do you want to create a new branch?"; then
-      BOOKMARK=$(gum input --placeholder "Name your brnach")
-      jj new @-
-      jj bookmark create "$BOOKMARK" -r @
-      gum style \
-        --foreground 121 \
-        --align left --width 40 --margin "2 2" \
-        '==> Created a new branch'
     fi
     ;;
   *)
