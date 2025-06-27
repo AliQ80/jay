@@ -62,9 +62,16 @@ elif $has_jj && ! $has_git; then
   jj st
   echo
 
-  action=$(gum choose "commit" "squash" "abandon" "branch" --header "Choose your action:")
+  action=$(gum choose "new" "commit" "squash" "abandon" "branch" --header "Choose your action:")
 
   case "$action" in
+  new)
+    if gum confirm "Do you want to create a new revision"; then
+    newCommitBase=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a branch to commit")
+    jj new "$newCommitBase"
+    echo
+    fi
+  ;;
   commit)
     MESSAGE=$(gum input --placeholder "Final commit message")
     if [ -n "$MESSAGE" ]; then
@@ -72,7 +79,8 @@ elif $has_jj && ! $has_git; then
       echo
     bookmark=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a branch to commit")
     if [ -n "$bookmark" ]; then
-      jj bookmark move --from "$bookmark" --to @-
+      jj bookmark move "$bookmark" --from "$bookmark" --to @-
+      echo
       echo "Commited to $bookmark"
     else
       echo "No branch selected."
