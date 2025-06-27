@@ -62,7 +62,7 @@ elif $has_jj && ! $has_git; then
   jj st
   echo
 
-  action=$(gum choose "new" "commit" "squash" "abandon" "branch" --header "Choose your action:")
+  action=$(gum choose "new" "commit" "squash" "bookmark" "abandon" "branch" --header "Choose your action:")
 
   case "$action" in
   new)
@@ -107,6 +107,24 @@ elif $has_jj && ! $has_git; then
         '==> Squashed work to parent'
     fi
     ;;
+  bookmark)
+      bookmark_action=$(gum choose "move" "create" "delete")
+      case "$bookmark_action" in
+        move)
+          bookmark_source=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a bookmark to move")
+          echo "you are moving the bookmark $bookmark_source"
+          bookmark_distination=$({ jj bookmark list | sed 's/:.*//'; printf "@\n@-\n"; } | gum choose --header="Choose where to move the bookmark")
+          echo
+          jj bookmark move -f "$bookmark_source" -t "$bookmark_distination"
+      esac
+      echo
+      jj log --limit 3
+      gum style \
+        --foreground 121 \
+        --align left --width 40 --margin "2 2" \
+        '==> Moved a bookmark'
+    ;;
+
   abandon)
     if gum confirm "Do you want to abandon the current work"; then
       jj abandon --retain-bookmarks
