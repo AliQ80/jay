@@ -108,7 +108,10 @@ elif $has_jj && ! $has_git; then
     if gum confirm "Do you want to create a new branch?"; then
       BOOKMARK=$(gum input --placeholder "Name your brnach")
       jj new @-
+      echo
       jj bookmark create "$BOOKMARK" -r @-
+      echo
+      jj log --limit 3
       gum style \
         --foreground 121 \
         --align left --width 40 --margin "2 2" \
