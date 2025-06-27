@@ -70,7 +70,13 @@ elif $has_jj && ! $has_git; then
     if [ -n "$MESSAGE" ]; then
       jj commit -m "$MESSAGE"
       echo
-      jj bookmark move --from 'heads(::@- & bookmarks())' --to @-
+    bookmark=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a branch to commit")
+    if [ -n "$bookmark" ]; then
+      jj bookmark move --from "$bookmark" --to @-
+      echo "Commited to $bookmark"
+    else
+      echo "No branch selected."
+    fi
       echo
       jj log --limit 3
       gum style \
