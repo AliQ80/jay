@@ -62,7 +62,7 @@ elif $has_jj && ! $has_git; then
   jj st
   echo
 
-  action=$(gum choose "new" "commit" "squash" "bookmark" "abandon" "branch" --header "Choose your action:")
+  action=$(gum choose "new" "commit" "squash" "bookmark" "remote" "abandon" "branch" --header "Choose your action:")
 
   case "$action" in
   new)
@@ -124,7 +124,55 @@ elif $has_jj && ! $has_git; then
         --align left --width 40 --margin "2 2" \
         '==> Moved a bookmark'
     ;;
-
+  remote)
+      jj git remote list
+      echo
+      remote_action=$(gum choose "push" "pull" "add" --header "Choose a remote action:")
+      case "$remote_action" in
+          push)
+              push_source=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a bookmark to push")
+              remote_destination=$(jj git remote list | sed 's/ .*//' | gum choose --header="Choose a remote branch" --no-limit; echo "new branch")
+              if [[ $remote_destination == *new* ]]; then
+                  jj git push -b "$push_source" --allow-new
+                  echo
+              else
+                  jj git push -b "$push_source" --remote "$remote_destination"
+                  echo
+              fi
+              gum style \
+                  --foreground 121 \
+                  --align left --width 40 --margin "2 2" \
+                  '==> Pushed bookmark "$push_source" remote branch "$remote_destination"'
+              ;;
+          pull)
+              jj git pull
+              echo
+              jj log --limit 3
+              gum style \
+                  --foreground 121 \
+                  --align left --width 40 --margin "2 2" \
+                  '==> Pulled from remote'
+              ;;
+          add)
+              new_remote_name=$(gum input --header="Add a new remote" --placeholder="Choose remote name")
+              new_remote_url=$(gum input --header="Input remote SSH URL" --placeholder="git@github.com:<USER>/<REPO>.git")
+              if [ -n "$new_remote_name" ] && [ -n "$new_remote_url" ]; then
+                  jj git remote add "$new_remote_name" "$new_remote_url"
+                  echo
+                  jj git remote list
+                  gum style \
+                      --foreground 121 \
+                      --align left --width 40 --margin "2 2" \
+                      "==> Added remote $new_remote_name"
+              else
+                  echo "Remote name or URL not provided. Canceled."
+              fi
+            ;;
+          *)
+            echo "Canceled action"
+            ;;
+        esac
+        ;;
   abandon)
     if gum confirm "Do you want to abandon the current work"; then
       jj abandon --retain-bookmarks
