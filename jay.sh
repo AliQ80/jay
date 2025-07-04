@@ -131,7 +131,7 @@ elif $has_jj && ! $has_git; then
       case "$remote_action" in
           push)
               push_source=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a bookmark to push")
-              remote_destination=$(jj git remote list | sed 's/ .*//' | gum choose --header="Choose a remote branch" --no-limit; echo "new branch")
+              remote_destination=$({ jj git remote list | sed 's/ .*//'; printf "new branch"; } | gum choose --header="Choose a remote branch")
               if [[ $remote_destination == *new* ]]; then
                   jj git push -b "$push_source" --allow-new
                   echo
