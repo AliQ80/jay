@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# Check required dependencies
+for cmd in jj gum git; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "Error: Required command '$cmd' not found. Please install it first."
+    exit 1
+  fi
+done
+
 gum style \
   --foreground 212 --border-foreground 62 --border rounded \
   --align center --width 30 --margin "1 2" --padding "0 2" \
@@ -77,14 +85,14 @@ elif $has_jj && ! $has_git; then
     if [ -n "$MESSAGE" ]; then
       jj commit -m "$MESSAGE"
       echo
-    bookmark=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a branch to commit")
-    if [ -n "$bookmark" ]; then
-      jj bookmark move "$bookmark" --from "$bookmark" --to @-
-      echo
-      echo "Commited to $bookmark"
-    else
-      echo "No branch selected."
-    fi
+      bookmark=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a branch to commit")
+      if [ -n "$bookmark" ]; then
+        jj bookmark move "$bookmark" --from "$bookmark" --to @-
+        echo
+        echo "Committed to $bookmark"
+      else
+        echo "No branch selected."
+      fi
       echo
       jj log --limit 3
       gum style \
@@ -113,9 +121,9 @@ elif $has_jj && ! $has_git; then
         move)
           bookmark_source=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a bookmark to move")
           echo "you are moving the bookmark $bookmark_source"
-          bookmark_distination=$({ jj bookmark list | sed 's/:.*//'; printf "@\n@-\n"; } | gum choose --header="Choose where to move the bookmark")
+          bookmark_destination=$({ jj bookmark list | sed 's/:.*//'; printf "@\n@-\n"; } | gum choose --header="Choose where to move the bookmark")
           echo
-          jj bookmark move -f "$bookmark_source" -t "$bookmark_distination"
+          jj bookmark move -f "$bookmark_source" -t "$bookmark_destination"
       esac
       echo
       jj log --limit 3
@@ -142,7 +150,7 @@ elif $has_jj && ! $has_git; then
               gum style \
                   --foreground 121 \
                   --align left --width 40 --margin "2 2" \
-                  '==> Pushed bookmark "$push_source" remote branch "$remote_destination"'
+                  "==> Pushed bookmark \"$push_source\" to remote branch \"$remote_destination\""
               ;;
           pull)
               jj git pull
@@ -186,7 +194,7 @@ elif $has_jj && ! $has_git; then
     ;;
   branch)
     if gum confirm "Do you want to create a new branch?"; then
-      BOOKMARK=$(gum input --placeholder "Name your brnach")
+      BOOKMARK=$(gum input --placeholder "Name your branch")
       jj new @-
       echo
       jj bookmark create "$BOOKMARK" -r @-
@@ -237,6 +245,7 @@ elif $has_jj && $has_git; then
     ;;
   squash)
     if gum confirm "Do you want to squash the current work into the parent commit"; then
+      BRANCH=$(git branch --show-current)
       jj squash
       echo
       git switch "$BRANCH"
