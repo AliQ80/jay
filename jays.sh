@@ -1,12 +1,18 @@
 #!/bin/bash
 
 # Check required dependencies
-for cmd in jj gum git; do
+for cmd in jj gum git gh; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "Error: Required command '$cmd' not found. Please install it first."
     exit 1
   fi
 done
+
+# Check if gh is authenticated
+if ! gh auth status >/dev/null 2>&1; then
+  echo "Error: GitHub CLI is not authenticated. Run 'gh auth login' first."
+  exit 1
+fi
 
 gum style \
   --foreground 212 --border-foreground 62 --border rounded \
@@ -135,7 +141,7 @@ elif $has_jj && ! $has_git; then
   remote)
       jj git remote list
       echo
-      remote_action=$(gum choose "push" "pull" "add" --header "Choose a remote action:")
+      remote_action=$(gum choose "push" "pull" "add" "remove" "create" --header "Choose a remote action:")
       case "$remote_action" in
           push)
               push_source=$(jj bookmark list | grep -v '^\s*@' | sed 's/:.*//' | gum choose --header="Choose a bookmark to push")
@@ -176,6 +182,73 @@ elif $has_jj && ! $has_git; then
                   echo "Remote name or URL not provided. Canceled."
               fi
             ;;
+          remove)
+              remote_to_remove=$(jj git remote list | sed 's/ .*//' | gum choose --header="Choose a remote to remove")
+              if [ -n "$remote_to_remove" ]; then
+                  if gum confirm "Do you want to remove remote '$remote_to_remove'?"; then
+                      jj git remote remove "$remote_to_remove"
+                      echo
+                      jj git remote list
+                      gum style \
+                          --foreground 121 \
+                          --align left --width 40 --margin "2 2" \
+                          "==> Removed remote $remote_to_remove"
+                  else
+                      echo "Remote removal canceled."
+                  fi
+              else
+                  echo "No remote selected."
+              fi
+              ;;
+          create)
+              # Get GitHub username
+              github_user=$(gh api user --jq '.login')
+              if [ $? -ne 0 ] || [ -z "$github_user" ]; then
+                  echo "Error: Could not get GitHub username. Check your authentication."
+                  exit 1
+              fi
+              
+              # Ask for repo name
+              repo_name=$(gum input --header="Create GitHub repository" --placeholder="Enter repository name")
+              if [ -z "$repo_name" ]; then
+                  echo "No repository name provided. Canceled."
+                  exit 0
+              fi
+              
+              # Ask for visibility
+              visibility=$(gum choose "public" "private" --header="Repository visibility:")
+              visibility_flag=""
+              if [ "$visibility" = "public" ]; then
+                  visibility_flag="--public"
+              else
+                  visibility_flag="--private"
+              fi
+              
+              # Create the repository
+              echo "Creating repository $github_user/$repo_name..."
+              if gh repo create "$repo_name" $visibility_flag; then
+                  echo
+                  # Add as remote
+                  remote_url="git@github.com:$github_user/$repo_name.git"
+                  jj git remote add origin "$remote_url"
+                  echo
+                  
+                  # Ask which bookmark/branch to push
+                  push_source=$(jj bookmark list | grep -v '^\s*@' | sed 's/:.*//' | gum choose --header="Choose a bookmark to push to new repo")
+                  if [ -n "$push_source" ]; then
+                      if gum confirm "Push '$push_source' to the new GitHub repository?"; then
+                          jj git push -b "$push_source" --allow-new
+                          echo
+                          gum style \
+                              --foreground 121 \
+                              --align left --width 50 --margin "2 2" \
+                              "==> Created repo $github_user/$repo_name and pushed $push_source"
+                      fi
+                  fi
+              else
+                  echo "Error: Failed to create repository. It may already exist."
+              fi
+              ;;
           *)
             echo "Canceled action"
             ;;
