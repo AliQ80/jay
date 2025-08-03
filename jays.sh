@@ -105,6 +105,27 @@ elif $has_jj && ! $has_git; then
         --foreground 121 \
         --align left --width 40 --margin "2 2" \
         '==> Created a new commit'
+      
+      # Check if remotes exist and ask to push
+      if jj git remote list | grep -q .; then
+        if gum confirm "Push '$bookmark' to remote?"; then
+          # Check if multiple remotes exist
+          remote_count=$(jj git remote list | wc -l)
+          if [ "$remote_count" -gt 1 ]; then
+            selected_remote=$(jj git remote list | sed 's/ .*//' | gum choose --header="Choose remote to push to:")
+            if [ -n "$selected_remote" ]; then
+              jj git push -b "$bookmark" --remote "$selected_remote" --allow-new
+            fi
+          else
+            jj git push -b "$bookmark" --allow-new
+          fi
+          echo
+          gum style \
+            --foreground 121 \
+            --align left --width 40 --margin "2 2" \
+            "==> Pushed '$bookmark' to remote"
+        fi
+      fi
     else
       echo "No message entered."
     fi
@@ -310,6 +331,27 @@ elif $has_jj && $has_git; then
         --foreground 121 \
         --align left --width 40 --margin "2 2" \
         '==> Created a new commit'
+      
+      # Check if remotes exist and ask to push
+      if jj git remote list | grep -q .; then
+        if gum confirm "Push '$BRANCH' to remote?"; then
+          # Check if multiple remotes exist
+          remote_count=$(jj git remote list | wc -l)
+          if [ "$remote_count" -gt 1 ]; then
+            selected_remote=$(jj git remote list | sed 's/ .*//' | gum choose --header="Choose remote to push to:")
+            if [ -n "$selected_remote" ]; then
+              jj git push -b "$BRANCH" --remote "$selected_remote" --allow-new
+            fi
+          else
+            jj git push -b "$BRANCH" --allow-new
+          fi
+          echo
+          gum style \
+            --foreground 121 \
+            --align left --width 40 --margin "2 2" \
+            "==> Pushed '$BRANCH' to remote"
+        fi
+      fi
 
     else
       echo "No message entered."
