@@ -132,7 +132,6 @@ elif $has_jj && ! $has_git; then
             else
               jj git push -b "$bookmark" --allow-new
             fi
-            echo
             gum style \
               --foreground 121 \
               --align left --width 40 --margin "1 2" \
@@ -236,7 +235,6 @@ elif $has_jj && ! $has_git; then
         list)
           echo "Current bookmarks:"
           jj bookmark list
-          echo
           gum style \
             --foreground 121 \
             --align left --width 40 --margin "1 2" \
@@ -382,7 +380,6 @@ elif $has_jj && ! $has_git; then
             if [ -n "$push_source" ]; then
               if gum confirm "Push '$push_source' to the new GitHub repository?"; then
                 jj git push -b "$push_source" --allow-new
-                echo
                 gum style \
                   --foreground 121 \
                   --align left --width 50 --margin "1 2" \
@@ -400,7 +397,6 @@ elif $has_jj && ! $has_git; then
           if ! jj git remote list | grep -q .; then
             echo "No remotes configured."
           fi
-          # echo
           gum style \
             --foreground 121 \
             --align left --width 40 --margin "1 2" \
@@ -495,7 +491,6 @@ elif $has_jj && $has_git; then
           else
             jj git push -b "$BRANCH" --allow-new
           fi
-          echo
           gum style \
             --foreground 121 \
             --align left --width 40 --margin "1 2" \
