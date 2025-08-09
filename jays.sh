@@ -28,7 +28,10 @@ has_jj=false
 
 # Case 1: No .git and no .jj
 if ! $has_git && ! $has_jj; then
-  init=$(gum choose "colocate" "standalone" --header "No .git or .jj found. How do you want to initialize JJ?")
+  init=$(gum choose \
+      "standalone - Pure Jujutsu setup for modern version control" \
+      "colocate - Initialize with Git integration for existing workflows" \
+      --header "No .git or .jj found. How do you want to initialize JJ?" | cut -d' ' -f1)
 
   case "$init" in
   colocate)
