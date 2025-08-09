@@ -259,7 +259,10 @@ elif $has_jj && ! $has_git; then
               fi
               
               # Ask for visibility
-              visibility=$(gum choose "public" "private" --header="Repository visibility:")
+              visibility=$(gum choose \
+                  "private - Repository visible only to you and collaborators" \
+                  "public - Repository visible to everyone on GitHub" \
+                  --header "Repository visibility:" | cut -d' ' -f1)
               visibility_flag=""
               if [ "$visibility" = "public" ]; then
                   visibility_flag="--public"
