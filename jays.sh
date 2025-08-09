@@ -155,29 +155,103 @@ elif $has_jj && ! $has_git; then
       fi
       ;;
     bookmark)
-      bookmark_action=$(gum choose \
-        "move - Relocate existing bookmark to different revision" \
-        "create - Create new bookmark at specific revision" \
-        "delete - Remove an existing bookmark" \
-        --header "Choose bookmark action:" | cut -d' ' -f1)
-      case "$bookmark_action" in
-      move)
-        bookmark_source=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a bookmark to move")
-        echo "you are moving the bookmark $bookmark_source"
-        bookmark_destination=$({
-          jj bookmark list | sed 's/:.*//'
-          printf "@\n@-\n"
-        } | gum choose --header="Choose where to move the bookmark")
-        echo
-        jj bookmark move -f "$bookmark_source" -t "$bookmark_destination"
-        ;;
-      esac
-      echo
-      jj log --limit 3
-      gum style \
-        --foreground 121 \
-        --align left --width 40 --margin "1 2" \
-        '✅ Moved a bookmark'
+      while true; do
+        bookmark_action=$(gum choose \
+          "move - Relocate existing bookmark to different revision" \
+          "create - Create new bookmark at specific revision" \
+          "delete - Remove an existing bookmark" \
+          "list - Display all bookmarks" \
+          "back - Return to main menu" \
+          --header "Choose bookmark action:" | cut -d' ' -f1)
+        case "$bookmark_action" in
+        move)
+          bookmark_source=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a bookmark to move")
+          if [ -n "$bookmark_source" ]; then
+            echo "you are moving the bookmark $bookmark_source"
+            bookmark_destination=$({
+              jj bookmark list | sed 's/:.*//'
+              printf "@\n@-\n"
+            } | gum choose --header="Choose where to move the bookmark")
+            if [ -n "$bookmark_destination" ]; then
+              echo
+              jj bookmark move -f "$bookmark_source" -t "$bookmark_destination"
+              echo
+              jj log --limit 3
+              gum style \
+                --foreground 121 \
+                --align left --width 40 --margin "1 2" \
+                '✅ Moved a bookmark'
+            else
+              echo "❌ No destination selected."
+            fi
+          else
+            echo "❌ No bookmark selected."
+          fi
+          break
+          ;;
+        create)
+          bookmark_name=$(gum input --header="Create new bookmark" --placeholder="Enter bookmark name")
+          if [ -n "$bookmark_name" ]; then
+            bookmark_location=$({
+              printf "@\n@-\n"
+              jj bookmark list | sed 's/:.*//'
+            } | gum choose --header="Choose location for new bookmark")
+            if [ -n "$bookmark_location" ]; then
+              echo
+              jj bookmark create "$bookmark_name" -r "$bookmark_location"
+              echo
+              jj log --limit 3
+              gum style \
+                --foreground 121 \
+                --align left --width 40 --margin "1 2" \
+                "✅ Created bookmark $bookmark_name"
+            else
+              echo "❌ No location selected."
+            fi
+          else
+            echo "❌ No bookmark name provided."
+          fi
+          break
+          ;;
+        delete)
+          bookmark_to_delete=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose bookmark to delete")
+          if [ -n "$bookmark_to_delete" ]; then
+            if gum confirm "Do you want to delete bookmark '$bookmark_to_delete'?"; then
+              echo
+              jj bookmark delete "$bookmark_to_delete"
+              echo
+              jj log --limit 3
+              gum style \
+                --foreground 121 \
+                --align left --width 40 --margin "1 2" \
+                "🗑️ Deleted bookmark $bookmark_to_delete"
+            else
+              echo "❌ Bookmark deletion canceled."
+            fi
+          else
+            echo "❌ No bookmark selected."
+          fi
+          break
+          ;;
+        list)
+          echo "Current bookmarks:"
+          jj bookmark list
+          echo
+          gum style \
+            --foreground 121 \
+            --align left --width 40 --margin "1 2" \
+            'ℹ️ Listed all bookmarks'
+          # Continue loop to stay in bookmark menu
+          ;;
+        back)
+          break
+          ;;
+        *)
+          echo "❌ Canceled action"
+          break
+          ;;
+        esac
+      done
       ;;
     remote)
       while true; do
