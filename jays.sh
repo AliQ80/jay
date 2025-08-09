@@ -76,18 +76,20 @@ elif $has_git && ! $has_jj; then
 # Case 3: only .jj exist standalone
 elif $has_jj && ! $has_git; then
 
-  jj st
-  echo
+  while true; do
+    jj st
+    echo
 
-  action=$(gum choose \
-      "commit - Finalize changes with a commit message" \
-      "squash - Merge current work into parent commit" \
-      "abandon - Discard current changes safely" \
-      "new - Create a new revision from any bookmark" \
-      "bookmark - Manage existing bookmarks" \
-      "branch - Create new branch with fresh revision" \
-      "remote - Push, pull, and manage remote repositories" \
-      --header "Choose your action:" | cut -d' ' -f1)
+    action=$(gum choose \
+        "commit - Finalize changes with a commit message" \
+        "squash - Merge current work into parent commit" \
+        "abandon - Discard current changes safely" \
+        "new - Create a new revision from any bookmark" \
+        "bookmark - Manage existing bookmarks" \
+        "branch - Create new branch with fresh revision" \
+        "remote - Push, pull, and manage remote repositories" \
+        "exit - Exit the script" \
+        --header "Choose your action:" | cut -d' ' -f1)
 
   case "$action" in
   new)
@@ -140,7 +142,6 @@ elif $has_jj && ! $has_git; then
     else
       echo "No message entered."
     fi
-    exit 0
     ;;
   squash)
     if gum confirm "Do you want to squash the current work into the parent commit"; then
@@ -175,27 +176,28 @@ elif $has_jj && ! $has_git; then
         '==> Moved a bookmark'
     ;;
   remote)
-      jj git remote list
-      echo
-      # Check if remotes exist and show appropriate menu
-      if jj git remote list | grep -q .; then
-          # Show full menu when remotes exist
-          remote_action=$(gum choose \
-              "push - Push a bookmark to remote" \
-              "pull - Fetch changes from remote" \
-              "list - Display all configured remotes" \
-              "add - Add a new remote for existing repo" \
-              "remove - Remove an existing remote" \
-              "create - Create new GitHub repo and push" \
-              --header "Choose a remote action:" | cut -d' ' -f1)
-      else
-          # Show limited menu when no remotes exist
-          remote_action=$(gum choose \
-              "add - Add a new remote for existing repo" \
-              "create - Create new GitHub repo and push" \
-              "list - Display all configured remotes" \
-              --header "No remotes found. Choose an action:" | cut -d' ' -f1)
-      fi
+      while true; do
+          # Check if remotes exist and show appropriate menu
+          if jj git remote list | grep -q .; then
+              # Show full menu when remotes exist
+              remote_action=$(gum choose \
+                  "push - Push a bookmark to remote" \
+                  "pull - Fetch changes from remote" \
+                  "list - Display all configured remotes" \
+                  "add - Add a new remote for existing repo" \
+                  "remove - Remove an existing remote" \
+                  "create - Create new GitHub repo and push" \
+                  "back - Return to main menu" \
+                  --header "Choose a remote action:" | cut -d' ' -f1)
+          else
+              # Show limited menu when no remotes exist
+              remote_action=$(gum choose \
+                  "add - Add a new remote for existing repo" \
+                  "create - Create new GitHub repo and push" \
+                  "list - Display all configured remotes" \
+                  "back - Return to main menu" \
+                  --header "No remotes found. Choose an action:" | cut -d' ' -f1)
+          fi
       case "$remote_action" in
           push)
               push_source=$(jj bookmark list | grep -v '^\s*@' | sed 's/:.*//' | gum choose --header="Choose a bookmark to push")
@@ -211,6 +213,7 @@ elif $has_jj && ! $has_git; then
                   --foreground 121 \
                   --align left --width 40 --margin "2 2" \
                   "==> Pushed bookmark \"$push_source\" to remote branch \"$remote_destination\""
+              break
               ;;
           pull)
               jj git pull
@@ -220,6 +223,7 @@ elif $has_jj && ! $has_git; then
                   --foreground 121 \
                   --align left --width 40 --margin "2 2" \
                   '==> Pulled from remote'
+              break
               ;;
           add)
               new_remote_name=$(gum input --header="Add a new remote" --placeholder="Choose remote name")
@@ -235,6 +239,7 @@ elif $has_jj && ! $has_git; then
               else
                   echo "Remote name or URL not provided. Canceled."
               fi
+              break
             ;;
           remove)
               remote_to_remove=$(jj git remote list | sed 's/ .*//' | gum choose --header="Choose a remote to remove")
@@ -253,6 +258,7 @@ elif $has_jj && ! $has_git; then
               else
                   echo "No remote selected."
               fi
+              break
               ;;
           create)
               # Get GitHub username
@@ -266,7 +272,7 @@ elif $has_jj && ! $has_git; then
               repo_name=$(gum input --header="Create GitHub repository" --placeholder="Enter repository name")
               if [ -z "$repo_name" ]; then
                   echo "No repository name provided. Canceled."
-                  exit 0
+                  continue
               fi
               
               # Ask for visibility
@@ -305,6 +311,7 @@ elif $has_jj && ! $has_git; then
               else
                   echo "Error: Failed to create repository. It may already exist."
               fi
+              break
               ;;
           list)
               echo "Current remotes:"
@@ -317,12 +324,18 @@ elif $has_jj && ! $has_git; then
                   --foreground 121 \
                   --align left --width 40 --margin "2 2" \
                   '==> Listed all remotes'
+              # Continue loop to stay in remote menu
+              ;;
+          back)
+              break
               ;;
           *)
-            echo "Canceled action"
-            ;;
+              echo "Canceled action"
+              break
+              ;;
         esac
-        ;;
+      done
+      ;;
   abandon)
     if gum confirm "Do you want to abandon the current work"; then
       jj abandon --retain-bookmarks
@@ -348,11 +361,15 @@ elif $has_jj && ! $has_git; then
         '==> Created a new branch'
     fi
     ;;
+  exit)
+    break
+    ;;
   *)
     echo "No action taken!"
     ;;
   esac
-
+  done
+  
   exit 0
 
 # Case 4: Both .jj and .git exist colocate
