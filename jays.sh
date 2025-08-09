@@ -452,14 +452,16 @@ elif $has_jj && ! $has_git; then
 # Case 4: Both .jj and .git exist colocate
 elif $has_jj && $has_git; then
 
-  jj st
-  echo
+  while true; do
+    jj st
+    echo
 
-  action=$(gum choose \
-    "commit - Create commits with Git branch synchronization" \
-    "squash - Squash changes while maintaining Git compatibility" \
-    "abandon - Safely discard changes in both systems" \
-    --header "Choose your action:" | cut -d' ' -f1)
+    action=$(gum choose \
+      "commit - Create commits with Git branch synchronization" \
+      "squash - Squash changes while maintaining Git compatibility" \
+      "abandon - Safely discard changes in both systems" \
+      "exit - Exit the script" \
+      --header "Choose your action:" | cut -d' ' -f1)
 
   case "$action" in
   commit)
@@ -501,7 +503,6 @@ elif $has_jj && $has_git; then
     else
       echo "No message entered."
     fi
-    exit 0
     ;;
   squash)
     if gum confirm "Do you want to squash the current work into the parent commit"; then
@@ -528,10 +529,14 @@ elif $has_jj && $has_git; then
         '🗑️ Abandoned current work'
     fi
     ;;
+  exit)
+    break
+    ;;
   *)
     echo "❌ No action taken!"
     ;;
   esac
+  done
 
   exit 0
 
