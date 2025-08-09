@@ -344,7 +344,11 @@ elif $has_jj && $has_git; then
   jj st
   echo
 
-  action=$(gum choose "commit" "squash" "abandon" --header "Choose your action:")
+  action=$(gum choose \
+      "commit - Create commits with Git branch synchronization" \
+      "squash - Squash changes while maintaining Git compatibility" \
+      "abandon - Safely discard changes in both systems" \
+      --header "Choose your action:" | cut -d' ' -f1)
 
   case "$action" in
   commit)
