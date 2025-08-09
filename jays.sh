@@ -177,14 +177,25 @@ elif $has_jj && ! $has_git; then
   remote)
       jj git remote list
       echo
-      remote_action=$(gum choose \
-          "push - Push a bookmark to remote" \
-          "pull - Fetch changes from remote" \
-          "list - Display all configured remotes" \
-          "add - Add a new remote for existing repo" \
-          "remove - Remove an existing remote" \
-          "create - Create new GitHub repo and push" \
-          --header "Choose a remote action:" | cut -d' ' -f1)
+      # Check if remotes exist and show appropriate menu
+      if jj git remote list | grep -q .; then
+          # Show full menu when remotes exist
+          remote_action=$(gum choose \
+              "push - Push a bookmark to remote" \
+              "pull - Fetch changes from remote" \
+              "list - Display all configured remotes" \
+              "add - Add a new remote for existing repo" \
+              "remove - Remove an existing remote" \
+              "create - Create new GitHub repo and push" \
+              --header "Choose a remote action:" | cut -d' ' -f1)
+      else
+          # Show limited menu when no remotes exist
+          remote_action=$(gum choose \
+              "add - Add a new remote for existing repo" \
+              "create - Create new GitHub repo and push" \
+              "list - Display all configured remotes" \
+              --header "No remotes found. Choose an action:" | cut -d' ' -f1)
+      fi
       case "$remote_action" in
           push)
               push_source=$(jj bookmark list | grep -v '^\s*@' | sed 's/:.*//' | gum choose --header="Choose a bookmark to push")
