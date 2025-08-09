@@ -3,14 +3,14 @@
 # Check required dependencies
 for cmd in jj gum git gh; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
-    echo "Error: Required command '$cmd' not found. Please install it first."
+    echo "❌ Error: Required command '$cmd' not found. Please install it first."
     exit 1
   fi
 done
 
 # Check if gh is authenticated
 if ! gh auth status >/dev/null 2>&1; then
-  echo "Error: GitHub CLI is not authenticated. Run 'gh auth login' first."
+  echo "❌ Error: GitHub CLI is not authenticated. Run 'gh auth login' first."
   exit 1
 fi
 
@@ -69,7 +69,7 @@ elif $has_git && ! $has_jj; then
     jj git init --git-repo .
     echo "JJ initialized and linked to Git repo."
   else
-    echo "JJ initialization canceled."
+    echo "❌ JJ initialization canceled."
   fi
   exit 0
 
@@ -117,7 +117,7 @@ elif $has_jj && ! $has_git; then
       gum style \
         --foreground 121 \
         --align left --width 40 --margin "2 2" \
-        '==> Created a new commit'
+        '✅ Created a new commit'
       
       # Check if remotes exist and ask to push
       if jj git remote list | grep -q .; then
@@ -136,7 +136,7 @@ elif $has_jj && ! $has_git; then
           gum style \
             --foreground 121 \
             --align left --width 40 --margin "2 2" \
-            "==> Pushed '$bookmark' to remote"
+            "📤 Pushed '$bookmark' to remote"
         fi
       fi
     else
@@ -151,7 +151,7 @@ elif $has_jj && ! $has_git; then
       gum style \
         --foreground 121 \
         --align left --width 40 --margin "2 2" \
-        '==> Squashed work to parent'
+        '✅ Squashed work to parent'
     fi
     ;;
   bookmark)
@@ -173,7 +173,7 @@ elif $has_jj && ! $has_git; then
       gum style \
         --foreground 121 \
         --align left --width 40 --margin "2 2" \
-        '==> Moved a bookmark'
+        '✅ Moved a bookmark'
     ;;
   remote)
       while true; do
@@ -212,7 +212,7 @@ elif $has_jj && ! $has_git; then
               gum style \
                   --foreground 121 \
                   --align left --width 40 --margin "2 2" \
-                  "==> Pushed bookmark \"$push_source\" to remote branch \"$remote_destination\""
+                  "📤 Pushed bookmark \"$push_source\" to remote branch \"$remote_destination\""
               break
               ;;
           pull)
@@ -222,7 +222,7 @@ elif $has_jj && ! $has_git; then
               gum style \
                   --foreground 121 \
                   --align left --width 40 --margin "2 2" \
-                  '==> Pulled from remote'
+                  '🔄 Pulled from remote'
               break
               ;;
           add)
@@ -235,9 +235,9 @@ elif $has_jj && ! $has_git; then
                   gum style \
                       --foreground 121 \
                       --align left --width 40 --margin "2 2" \
-                      "==> Added remote $new_remote_name"
+                      "✅ Added remote $new_remote_name"
               else
-                  echo "Remote name or URL not provided. Canceled."
+                  echo "❌ Remote name or URL not provided. Canceled."
               fi
               break
             ;;
@@ -251,12 +251,12 @@ elif $has_jj && ! $has_git; then
                       gum style \
                           --foreground 121 \
                           --align left --width 40 --margin "2 2" \
-                          "==> Removed remote $remote_to_remove"
+                          "✅ Removed remote $remote_to_remove"
                   else
-                      echo "Remote removal canceled."
+                      echo "❌ Remote removal canceled."
                   fi
               else
-                  echo "No remote selected."
+                  echo "❌ No remote selected."
               fi
               break
               ;;
@@ -264,14 +264,14 @@ elif $has_jj && ! $has_git; then
               # Get GitHub username
               github_user=$(gh api user --jq '.login')
               if [ $? -ne 0 ] || [ -z "$github_user" ]; then
-                  echo "Error: Could not get GitHub username. Check your authentication."
+                  echo "❌ Error: Could not get GitHub username. Check your authentication."
                   exit 1
               fi
               
               # Ask for repo name
               repo_name=$(gum input --header="Create GitHub repository" --placeholder="Enter repository name")
               if [ -z "$repo_name" ]; then
-                  echo "No repository name provided. Canceled."
+                  echo "❌ No repository name provided. Canceled."
                   continue
               fi
               
@@ -305,11 +305,11 @@ elif $has_jj && ! $has_git; then
                           gum style \
                               --foreground 121 \
                               --align left --width 50 --margin "2 2" \
-                              "==> Created repo $github_user/$repo_name and pushed $push_source"
+                              "✅ Created repo $github_user/$repo_name and pushed $push_source"
                       fi
                   fi
               else
-                  echo "Error: Failed to create repository. It may already exist."
+                  echo "❌ Error: Failed to create repository. It may already exist."
               fi
               break
               ;;
@@ -323,14 +323,14 @@ elif $has_jj && ! $has_git; then
               gum style \
                   --foreground 121 \
                   --align left --width 40 --margin "2 2" \
-                  '==> Listed all remotes'
+                  'ℹ️ Listed all remotes'
               # Continue loop to stay in remote menu
               ;;
           back)
               break
               ;;
           *)
-              echo "Canceled action"
+              echo "❌ Canceled action"
               break
               ;;
         esac
@@ -344,7 +344,7 @@ elif $has_jj && ! $has_git; then
       gum style \
         --foreground 121 \
         --align left --width 40 --margin "2 2" \
-        '==> Abandoned current work'
+        '🗑️ Abandoned current work'
     fi
     ;;
   branch)
@@ -358,14 +358,14 @@ elif $has_jj && ! $has_git; then
       gum style \
         --foreground 121 \
         --align left --width 40 --margin "2 2" \
-        '==> Created a new branch'
+        '✅ Created a new branch'
     fi
     ;;
   exit)
     break
     ;;
   *)
-    echo "No action taken!"
+    echo "❌ No action taken!"
     ;;
   esac
   done
@@ -399,7 +399,7 @@ elif $has_jj && $has_git; then
       gum style \
         --foreground 121 \
         --align left --width 40 --margin "2 2" \
-        '==> Created a new commit'
+        '✅ Created a new commit'
       
       # Check if remotes exist and ask to push
       if jj git remote list | grep -q .; then
@@ -418,7 +418,7 @@ elif $has_jj && $has_git; then
           gum style \
             --foreground 121 \
             --align left --width 40 --margin "2 2" \
-            "==> Pushed '$BRANCH' to remote"
+            "📤 Pushed '$BRANCH' to remote"
         fi
       fi
 
@@ -438,7 +438,7 @@ elif $has_jj && $has_git; then
       gum style \
         --foreground 121 \
         --align left --width 40 --margin "2 2" \
-        '==> Squashed work to parent'
+        '✅ Squashed work to parent'
     fi
     ;;
   abandon)
@@ -449,11 +449,11 @@ elif $has_jj && $has_git; then
       gum style \
         --foreground 121 \
         --align left --width 40 --margin "2 2" \
-        '==> Abandoned current work'
+        '🗑️ Abandoned current work'
     fi
     ;;
   *)
-    echo "No action taken!"
+    echo "❌ No action taken!"
     ;;
   esac
 
