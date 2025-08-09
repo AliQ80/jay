@@ -162,7 +162,7 @@ elif $has_jj && ! $has_git; then
   remote)
       jj git remote list
       echo
-      remote_action=$(gum choose "push" "pull" "add" "remove" "create" --header "Choose a remote action:")
+      remote_action=$(gum choose "push" "pull" "add" "remove" "create" "list" --header "Choose a remote action:")
       case "$remote_action" in
           push)
               push_source=$(jj bookmark list | grep -v '^\s*@' | sed 's/:.*//' | gum choose --header="Choose a bookmark to push")
@@ -269,6 +269,18 @@ elif $has_jj && ! $has_git; then
               else
                   echo "Error: Failed to create repository. It may already exist."
               fi
+              ;;
+          list)
+              echo "Current remotes:"
+              jj git remote list
+              if ! jj git remote list | grep -q .; then
+                  echo "No remotes configured."
+              fi
+              echo
+              gum style \
+                  --foreground 121 \
+                  --align left --width 40 --margin "2 2" \
+                  '==> Listed all remotes'
               ;;
           *)
             echo "Canceled action"
