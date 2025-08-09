@@ -143,7 +143,11 @@ elif $has_jj && ! $has_git; then
     fi
     ;;
   bookmark)
-      bookmark_action=$(gum choose "move" "create" "delete")
+      bookmark_action=$(gum choose \
+          "move - Relocate existing bookmark to different revision" \
+          "create - Create new bookmark at specific revision" \
+          "delete - Remove an existing bookmark" \
+          --header "Choose bookmark action:" | cut -d' ' -f1)
       case "$bookmark_action" in
         move)
           bookmark_source=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a bookmark to move")
