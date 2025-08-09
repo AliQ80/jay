@@ -76,7 +76,15 @@ elif $has_jj && ! $has_git; then
   jj st
   echo
 
-  action=$(gum choose "new" "commit" "squash" "bookmark" "remote" "abandon" "branch" --header "Choose your action:")
+  action=$(gum choose \
+      "commit - Finalize changes with a commit message" \
+      "squash - Merge current work into parent commit" \
+      "abandon - Discard current changes safely" \
+      "new - Create a new revision from any bookmark" \
+      "bookmark - Manage existing bookmarks" \
+      "branch - Create new branch with fresh revision" \
+      "remote - Push, pull, and manage remote repositories" \
+      --header "Choose your action:" | cut -d' ' -f1)
 
   case "$action" in
   new)
