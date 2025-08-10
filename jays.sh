@@ -130,11 +130,11 @@ elif $has_jj && ! $has_git; then
     echo
 
     action=$(gum choose \
-      "commit - Finalize changes with a commit message" \
-      "squash - Merge current work into parent commit" \
-      "abandon - Discard current changes safely" \
-      "new - Create a new revision from any bookmark" \
-      "bookmark - Manage existing bookmarks" \
+      "commit - Create permanent commits with descriptive messages" \
+      "squash - Merge current work into parent commit for cleaner history" \
+      "abandon - Safely discard current changes without affecting history" \
+      "new - Create new empty revision for experimentation/WIP work" \
+      "bookmark - Manage bookmarks and branches (branches are bookmarks in Jujutsu)" \
       "remote - Push, pull, and manage remote repositories" \
       "exit - Exit the script" \
       --header "Choose your action:" | cut -d' ' -f1)
