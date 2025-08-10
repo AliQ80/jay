@@ -162,26 +162,23 @@ elif $has_jj && ! $has_git; then
     commit)
       MESSAGE=$(gum input --placeholder "Final commit message")
       if [ -n "$MESSAGE" ]; then
-        jj commit -m "$MESSAGE"
-        echo
-        bookmark=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a branch to commit")
+        bookmark=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a branch to commit to")
         if [ -n "$bookmark" ]; then
+          jj commit -m "$MESSAGE"
+          echo
           jj bookmark move "$bookmark" --from "$bookmark" --to @-
           echo
           echo "Committed to $bookmark"
-        else
-          echo "No branch selected."
-        fi
-        echo
-        jj log --limit 3
-        gum style \
-          --foreground 121 \
-          --align left --width 40 --margin "1 2" \
-          '✅ Created a new commit'
+          echo
+          jj log --limit 3
+          gum style \
+            --foreground 121 \
+            --align left --width 40 --margin "1 2" \
+            '✅ Created a new commit'
 
-        # Check if remotes exist and ask to push
-        if jj git remote list | grep -q .; then
-          if gum confirm "Push '$bookmark' to remote?"; then
+          # Check if remotes exist and ask to push
+          if jj git remote list | grep -q .; then
+            if gum confirm "Push '$bookmark' to remote?"; then
             # Check if multiple remotes exist
             remote_count=$(jj git remote list | wc -l)
             push_success=false
@@ -210,6 +207,9 @@ elif $has_jj && ! $has_git; then
                 "📤 Pushed '$bookmark' to remote"
             fi
           fi
+        fi
+        else
+          echo "❌ Commit canceled - no branch selected."
         fi
       else
         echo "No message entered."
