@@ -135,7 +135,6 @@ elif $has_jj && ! $has_git; then
       "abandon - Discard current changes safely" \
       "new - Create a new revision from any bookmark" \
       "bookmark - Manage existing bookmarks" \
-      "branch - Create new branch with fresh revision" \
       "remote - Push, pull, and manage remote repositories" \
       "exit - Exit the script" \
       --header "Choose your action:" | cut -d' ' -f1)
@@ -143,12 +142,20 @@ elif $has_jj && ! $has_git; then
     case "$action" in
     new)
       if gum confirm "Do you want to create a new revision"; then
-        newCommitBase=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a branch to commit")
+        newCommitBase=$({
+          echo "@"
+          echo "@-"
+          jj bookmark list | sed 's/:.*//'
+        } | gum choose --header="Choose base for new revision")
         if [ -n "$newCommitBase" ]; then
           jj new "$newCommitBase"
           echo
+          gum style \
+            --foreground 121 \
+            --align left --width 40 --margin "1 2" \
+            "✅ Created new revision from $newCommitBase"
         else
-          echo "❌ No branch selected."
+          echo "❌ No base selected."
         fi
       fi
       ;;
@@ -222,13 +229,49 @@ elif $has_jj && ! $has_git; then
     bookmark)
       while true; do
         bookmark_action=$(gum choose \
+          "new - Create new branch/bookmark for feature development" \
+          "switch - Switch to existing branch/bookmark" \
           "move - Relocate existing bookmark to different revision" \
           "create - Create new bookmark at specific revision" \
           "delete - Remove an existing bookmark" \
           "list - Display all bookmarks" \
           "back - Return to main menu" \
-          --header "Choose bookmark action:" | cut -d' ' -f1)
+          --header "Bookmarks & Branches (in Jujutsu, branches are bookmarks):" | cut -d' ' -f1)
         case "$bookmark_action" in
+        new)
+          if gum confirm "Do you want to create a new branch/bookmark?"; then
+            BOOKMARK=$(gum input --placeholder "Name your branch/bookmark")
+            if [ -n "$BOOKMARK" ]; then
+              jj new @-
+              echo
+              jj bookmark create "$BOOKMARK" -r @-
+              echo
+              jj log --limit 3
+              gum style \
+                --foreground 121 \
+                --align left --width 40 --margin "1 2" \
+                "✅ Created new branch/bookmark '$BOOKMARK'"
+            else
+              echo "❌ No branch name provided."
+            fi
+          fi
+          break
+          ;;
+        switch)
+          current_bookmark=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Switch to branch/bookmark:")
+          if [ -n "$current_bookmark" ]; then
+            jj new "$current_bookmark"
+            echo
+            jj log --limit 3
+            gum style \
+              --foreground 121 \
+              --align left --width 40 --margin "1 2" \
+              "✅ Switched to branch/bookmark '$current_bookmark'"
+          else
+            echo "❌ No branch selected."
+          fi
+          break
+          ;;
         move)
           bookmark_source=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a bookmark to move")
           if [ -n "$bookmark_source" ]; then
@@ -504,20 +547,6 @@ elif $has_jj && ! $has_git; then
           --foreground 121 \
           --align left --width 40 --margin "1 2" \
           '🗑️ Abandoned current work'
-      fi
-      ;;
-    branch)
-      if gum confirm "Do you want to create a new branch?"; then
-        BOOKMARK=$(gum input --placeholder "Name your branch")
-        jj new @-
-        echo
-        jj bookmark create "$BOOKMARK" -r @-
-        echo
-        jj log --limit 3
-        gum style \
-          --foreground 121 \
-          --align left --width 40 --margin "1 2" \
-          '✅ Created a new branch'
       fi
       ;;
     exit)
