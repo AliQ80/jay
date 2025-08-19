@@ -160,11 +160,78 @@ elif $has_jj && ! $has_git; then
       fi
       ;;
     commit)
-      MESSAGE=$(gum input --placeholder "Final commit message")
+      # Ask if user wants AI generation
+      if gum confirm "Generate commit message with AI?"; then
+        # Generate default commit message with jjlama
+        DEFAULT_MESSAGE=$(gum spin --spinner dot --title "Generating commit message..." --show-output -- bash -c "jjlama 2>/dev/null" || echo "")
+        
+        if [ -n "$DEFAULT_MESSAGE" ]; then
+          # Show the generated message
+          echo
+          echo "Generated commit message:"
+          gum style --border rounded --padding "1 2" --margin "1 0" -- \
+            "$DEFAULT_MESSAGE"
+          echo
+        
+        # Present options
+        while true; do
+          choice=$(gum choose \
+            "accept - Use this message and continue" \
+            "edit - Modify this message" \
+            "regenerate - Generate a new message" \
+            "cancel - Return to main menu" \
+            --header "What would you like to do?" | cut -d' ' -f1)
+          
+          case "$choice" in
+          accept)
+            MESSAGE="$DEFAULT_MESSAGE"
+            break
+            ;;
+          edit)
+            MESSAGE=$(gum input --placeholder "Final commit message" --value="$DEFAULT_MESSAGE")
+            if [ -n "$MESSAGE" ]; then
+              break
+            else
+              echo "❌ No message provided. Please try again or choose cancel."
+            fi
+            ;;
+          regenerate)
+            DEFAULT_MESSAGE=$(gum spin --spinner dot --title "Regenerating commit message..." --show-output -- bash -c "jjlama 2>/dev/null" || echo "")
+            if [ -n "$DEFAULT_MESSAGE" ]; then
+              echo
+              echo "Generated commit message:"
+              gum style --border rounded --padding "1 2" --margin "1 0" -- \
+                "$DEFAULT_MESSAGE"
+              echo
+            else
+              echo "❌ Failed to generate message"
+            fi
+            ;;
+          cancel)
+            echo "❌ Commit canceled."
+            MESSAGE=""
+            break
+            ;;
+          *)
+            echo "❌ No option selected."
+            MESSAGE=""
+            break
+            ;;
+          esac
+        done
+        else
+          # Fallback if jjlama not available
+          MESSAGE=$(gum input --placeholder "Final commit message")
+        fi
+      else
+        # User chose manual input
+        MESSAGE=$(gum input --placeholder "Final commit message")
+      fi
+      
       if [ -n "$MESSAGE" ]; then
         bookmark=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a branch to commit to")
-        if [ -n "$bookmark" ]; then
-          jj commit -m "$MESSAGE"
+        if [ -n "$bookmark" ] && [ -n "$MESSAGE" ] && [ "${#MESSAGE}" -gt 0 ]; then
+          jj commit --message="$MESSAGE"
           echo
           jj bookmark move "$bookmark" --from "$bookmark" --to @-
           echo
@@ -579,10 +646,77 @@ elif $has_jj && $has_git; then
 
   case "$action" in
   commit)
-    MESSAGE=$(gum input --placeholder "Final commit message")
+    # Ask if user wants AI generation
+    if gum confirm "Generate commit message with AI?"; then
+      # Generate default commit message with jjlama
+      DEFAULT_MESSAGE=$(gum spin --spinner dot --title "Generating commit message..." --show-output -- bash -c "jjlama 2>/dev/null" || echo "")
+      
+      if [ -n "$DEFAULT_MESSAGE" ]; then
+        # Show the generated message
+        echo
+        echo "Generated commit message:"
+        gum style --border rounded --padding "1 2" --margin "1 0" -- \
+          "$DEFAULT_MESSAGE"
+        echo
+      
+      # Present options
+      while true; do
+        choice=$(gum choose \
+          "accept - Use this message and continue" \
+          "edit - Modify this message" \
+          "regenerate - Generate a new message" \
+          "cancel - Return to main menu" \
+          --header "What would you like to do?" | cut -d' ' -f1)
+        
+        case "$choice" in
+        accept)
+          MESSAGE="$DEFAULT_MESSAGE"
+          break
+          ;;
+        edit)
+          MESSAGE=$(gum input --placeholder "Final commit message" --value="$DEFAULT_MESSAGE")
+          if [ -n "$MESSAGE" ]; then
+            break
+          else
+            echo "❌ No message provided. Please try again or choose cancel."
+          fi
+          ;;
+        regenerate)
+          DEFAULT_MESSAGE=$(gum spin --spinner dot --title "Regenerating commit message..." --show-output -- bash -c "jjlama 2>/dev/null" || echo "")
+          if [ -n "$DEFAULT_MESSAGE" ]; then
+            echo
+            echo "Generated commit message:"
+            gum style --border rounded --padding "1 2" --margin "1 0" -- \
+              "$DEFAULT_MESSAGE"
+            echo
+          else
+            echo "❌ Failed to generate message"
+          fi
+          ;;
+        cancel)
+          echo "❌ Commit canceled."
+          MESSAGE=""
+          break
+          ;;
+        *)
+          echo "❌ No option selected."
+          MESSAGE=""
+          break
+          ;;
+        esac
+      done
+      else
+        # Fallback if jjlama not available
+        MESSAGE=$(gum input --placeholder "Final commit message")
+      fi
+    else
+      # User chose manual input
+      MESSAGE=$(gum input --placeholder "Final commit message")
+    fi
+    
     BRANCH=$(git branch --show-current)
-    if [ -n "$MESSAGE" ]; then
-      jj commit -m "$MESSAGE"
+    if [ -n "$MESSAGE" ] && [ "${#MESSAGE}" -gt 0 ]; then
+      jj commit --message="$MESSAGE"
       echo
       jj bookmark move --from 'heads(::@- & bookmarks())' --to @-
       echo
