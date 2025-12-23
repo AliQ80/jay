@@ -253,7 +253,7 @@ elif $has_jj && ! $has_git; then
               selected_remote=$(jj git remote list | sed 's/ .*//' | gum choose --header="Choose remote to push to:")
               if [ -n "$selected_remote" ]; then
                 echo
-                if jj git push -b "$bookmark" --remote "$selected_remote" --allow-new; then
+                if jj git push -b "$bookmark" --remote "$selected_remote"; then
                   push_success=true
                 fi
               else
@@ -261,7 +261,7 @@ elif $has_jj && ! $has_git; then
               fi
             else
               echo
-              if jj git push -b "$bookmark" --allow-new; then
+              if jj git push -b "$bookmark"; then
                 push_success=true
               fi
             fi
@@ -468,7 +468,7 @@ elif $has_jj && ! $has_git; then
           fi
           
           if [[ $remote_destination == *new* ]]; then
-            jj git push -b "$push_source" --allow-new
+            jj git push -b "$push_source"
             echo
           else
             jj git push -b "$push_source" --remote "$remote_destination"
@@ -571,7 +571,7 @@ elif $has_jj && ! $has_git; then
             push_source=$(jj bookmark list | grep -v '^\s*@' | sed 's/:.*//' | gum choose --header="Choose a bookmark to push to new repo")
             if [ -n "$push_source" ]; then
               if gum confirm "Push '$push_source' to the new GitHub repository?"; then
-                jj git push -b "$push_source" --allow-new
+                jj git push -b "$push_source"
                 gum style \
                   --foreground 121 \
                   --align left --width 50 --margin "1 2" \
@@ -738,7 +738,7 @@ elif $has_jj && $has_git; then
             selected_remote=$(jj git remote list | sed 's/ .*//' | gum choose --header="Choose remote to push to:")
             if [ -n "$selected_remote" ]; then
               echo
-              if jj git push -b "$BRANCH" --remote "$selected_remote" --allow-new; then
+              if jj git push -b "$BRANCH" --remote "$selected_remote"; then
                 push_success=true
               fi
             else
@@ -746,7 +746,7 @@ elif $has_jj && $has_git; then
             fi
           else
             echo
-            if jj git push -b "$BRANCH" --allow-new; then
+            if jj git push -b "$BRANCH"; then
               push_success=true
             fi
           fi
@@ -982,7 +982,7 @@ elif $has_jj && $has_git; then
         fi
         
         if [[ $remote_destination == *new* ]]; then
-          jj git push -b "$CURRENT_BRANCH" --allow-new
+          jj git push -b "$CURRENT_BRANCH"
           echo
         else
           jj git push -b "$CURRENT_BRANCH" --remote "$remote_destination"
@@ -1084,7 +1084,7 @@ elif $has_jj && $has_git; then
           # Push current Git branch
           CURRENT_BRANCH=$(git branch --show-current)
           if gum confirm "Push '$CURRENT_BRANCH' to the new GitHub repository?"; then
-            jj git push -b "$CURRENT_BRANCH" --allow-new
+            jj git push -b "$CURRENT_BRANCH"
             echo
             gum style \
               --foreground 121 \
