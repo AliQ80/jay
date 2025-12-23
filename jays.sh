@@ -1,1133 +1,571 @@
 #!/bin/bash
 
-# Check required dependencies
-for cmd in jj gum git gh; do
-  if ! command -v "$cmd" >/dev/null 2>&1; then
-    echo "❌ Error: Required command '$cmd' not found. Please install it first."
-    exit 1
-  fi
-done
+# ==========================================
+# Configuration & Styles
+# ==========================================
+GUM_OPTS=(--foreground 212 --border-foreground 62 --border rounded --align center --width 30 --margin "1 2" --padding "0 2")
+GUM_STYLE_SUCCESS=(--foreground 121 --align left --width 40 --margin "1 2")
+GUM_STYLE_INFO=(--foreground 121 --align left --width 40 --margin "1 2")
+GUM_STYLE_ERROR=(--foreground 196 --align left --width 40 --margin "1 2")
+GUM_STYLE_COMMIT=(--border rounded --padding "1 2" --margin "1 0" --foreground 212 --border-foreground 62)
 
-# Check if gh is authenticated
-if ! gh auth status >/dev/null 2>&1; then
-  echo "❌ Error: GitHub CLI is not authenticated. Run 'gh auth login' first."
-  exit 1
-fi
+# Global State
+IS_COLOCATED=false
+IS_GIT_ONLY=false
+IS_STANDALONE=false
 
-gum style \
-  --foreground 212 --border-foreground 62 --border rounded \
-  --align center --width 30 --margin "1 2" --padding "0 2" \
-  'Jay' 'Jujutsu Git helper'
+# ==========================================
+# Helper Functions
+# ==========================================
 
-# Check existence of folders
-has_git=false
-has_jj=false
-
-[ -d .git ] && has_git=true
-[ -d .jj ] && has_jj=true
-
-# Case 1: No .git and no .jj
-if ! $has_git && ! $has_jj; then
-  init=$(gum choose \
-    "standalone - Pure Jujutsu setup for modern version control" \
-    "colocate - Initialize with Git integration for existing workflows" \
-    "cancel - Exit without initializing" \
-    --header "No .git or .jj found. How do you want to initialize JJ?" | cut -d' ' -f1)
-
-  case "$init" in
-  colocate)
-    echo
-    gum style \
-      --foreground 212 --border-foreground 62 --border rounded \
-      --align left --padding "1 2" --margin "0 2" \
-      "Colocated setup will create:" \
-      "" \
-      "• Git repository (.git)" \
-      "• Jujutsu with Git integration (.jj)" \
-      "• Initial commit in both systems" \
-      "• Branch synchronization between Git and Jujutsu" \
-      "" \
-      "Location: $(pwd)"
-    echo
-    
-    if gum confirm "Proceed with colocated initialization?"; then
-      git init
-      BRANCH=$(git branch --show-current)
-      echo
-      jj git init --colocate
-      echo
-      jj bookmark create "$BRANCH" -r @
-      echo
-      jj commit -m "initial commit"
-      echo
-      git switch "$BRANCH"
-    else
-      echo "❌ Initialization canceled."
-      exit 0
+check_dependencies() {
+  for cmd in jj gum git gh; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      echo "❌ Error: Required command '$cmd' not found. Please install it first."
+      exit 1
     fi
-    ;;
-  standalone)
-    echo
-    gum style \
-      --foreground 212 --border-foreground 62 --border rounded \
-      --align left --padding "1 2" --margin "0 2" \
-      "Standalone setup will create:" \
-      "" \
-      "• Pure Jujutsu repository (.jj)" \
-      "• First bookmark (you will name it)" \
-      "• Initial commit" \
-      "• No Git integration" \
-      "" \
-      "Location: $(pwd)"
-    echo
-    
-    if gum confirm "Proceed with standalone initialization?"; then
-      jj git init
-      echo
-      echo "Create the first bookmark"
-      BOOKMARK=$(gum input --placeholder "name your bookmark")
-      if [ -n "$BOOKMARK" ]; then
-        jj bookmark create "$BOOKMARK" -r @
-        echo
-        jj commit -m "initial commit"
-      else
-        echo "❌ No bookmark name provided. Initialization canceled."
-        exit 0
-      fi
-    else
-      echo "❌ Initialization canceled."
-      exit 0
-    fi
-    ;;
-  cancel)
-    echo "❌ Initialization canceled."
-    exit 0
-    ;;
-  *)
-    echo "❌ No option selected."
-    exit 0
-    ;;
-  esac
-
-  exit 0
-
-# Case 2: .git exists but .jj does not
-elif $has_git && ! $has_jj; then
-  echo "Found Git repo but no JJ repo."
-  if gum confirm "Do you want to initialize JJ and link it to the existing Git repo?"; then
-    jj git init --git-repo .
-    echo "JJ initialized and linked to Git repo."
-  else
-    echo "❌ JJ initialization canceled."
-  fi
-  exit 0
-
-# Case 3: only .jj exist standalone
-elif $has_jj && ! $has_git; then
-
-  while true; do
-    jj st
-    echo
-
-    action=$(gum choose \
-      "commit - Create permanent commits with descriptive messages" \
-      "squash - Merge current work into parent commit for cleaner history" \
-      "abandon - Safely discard current changes without affecting history" \
-      "new - Create new empty revision for experimentation/WIP work" \
-      "bookmark - Manage bookmarks and branches (branches are bookmarks in Jujutsu)" \
-      "remote - Push, pull, and manage remote repositories" \
-      "exit - Exit the script" \
-      --header "Choose your action:" | cut -d' ' -f1)
-
-    case "$action" in
-    new)
-      if gum confirm "Do you want to create a new revision"; then
-        newCommitBase=$({
-          echo "@"
-          echo "@-"
-          jj bookmark list | sed 's/:.*//'
-        } | gum choose --header="Choose base for new revision")
-        if [ -n "$newCommitBase" ]; then
-          jj new "$newCommitBase"
-          echo
-          gum style \
-            --foreground 121 \
-            --align left --width 40 --margin "1 2" \
-            "✅ Created new revision from $newCommitBase"
-        else
-          echo "❌ No base selected."
-        fi
-      fi
-      ;;
-    commit)
-      # Ask if user wants AI generation
-      if gum confirm "Generate commit message with AI?"; then
-        # Generate default commit message with jjlama
-        DEFAULT_MESSAGE=$(gum spin --spinner dot --title "Generating commit message..." --show-output -- bash -c "jjlama 2>/dev/null" || echo "")
-        
-        if [ -n "$DEFAULT_MESSAGE" ]; then
-          # Show the generated message
-          echo
-          echo "Generated commit message:"
-          gum style --border rounded --padding "1 2" --margin "1 0" -- \
-            "$DEFAULT_MESSAGE"
-          echo
-        
-        # Present options
-        while true; do
-          choice=$(gum choose \
-            "accept - Use this message and continue" \
-            "edit - Modify this message" \
-            "regenerate - Generate a new message" \
-            "cancel - Return to main menu" \
-            --header "What would you like to do?" | cut -d' ' -f1)
-          
-          case "$choice" in
-          accept)
-            MESSAGE="$DEFAULT_MESSAGE"
-            break
-            ;;
-          edit)
-            MESSAGE=$(gum input --placeholder "Final commit message" --value="$DEFAULT_MESSAGE")
-            if [ -n "$MESSAGE" ]; then
-              break
-            else
-              echo "❌ No message provided. Please try again or choose cancel."
-            fi
-            ;;
-          regenerate)
-            DEFAULT_MESSAGE=$(gum spin --spinner dot --title "Regenerating commit message..." --show-output -- bash -c "jjlama 2>/dev/null" || echo "")
-            if [ -n "$DEFAULT_MESSAGE" ]; then
-              echo
-              echo "Generated commit message:"
-              gum style --border rounded --padding "1 2" --margin "1 0" -- \
-                "$DEFAULT_MESSAGE"
-              echo
-            else
-              echo "❌ Failed to generate message"
-            fi
-            ;;
-          cancel)
-            echo "❌ Commit canceled."
-            MESSAGE=""
-            break
-            ;;
-          *)
-            echo "❌ No option selected."
-            MESSAGE=""
-            break
-            ;;
-          esac
-        done
-        else
-          # Fallback if jjlama not available
-          MESSAGE=$(gum input --placeholder "Final commit message")
-        fi
-      else
-        # User chose manual input
-        MESSAGE=$(gum input --placeholder "Final commit message")
-      fi
-      
-      if [ -n "$MESSAGE" ]; then
-        bookmark=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a branch to commit to")
-        if [ -n "$bookmark" ] && [ -n "$MESSAGE" ] && [ "${#MESSAGE}" -gt 0 ]; then
-          jj commit --message="$MESSAGE"
-          echo
-          jj bookmark move "$bookmark" --from "$bookmark" --to @-
-          echo
-          echo "Committed to $bookmark"
-          echo
-          jj log --limit 3
-          gum style \
-            --foreground 121 \
-            --align left --width 40 --margin "1 2" \
-            '✅ Created a new commit'
-
-          # Check if remotes exist and ask to push
-          if jj git remote list | grep -q .; then
-            if gum confirm "Push '$bookmark' to remote?"; then
-            # Check if multiple remotes exist
-            remote_count=$(jj git remote list | wc -l)
-            push_success=false
-            if [ "$remote_count" -gt 1 ]; then
-              selected_remote=$(jj git remote list | sed 's/ .*//' | gum choose --header="Choose remote to push to:")
-              if [ -n "$selected_remote" ]; then
-                echo
-                if jj git push -b "$bookmark" --remote "$selected_remote"; then
-                  push_success=true
-                fi
-              else
-                echo "❌ No remote selected."
-              fi
-            else
-              echo
-              if jj git push -b "$bookmark"; then
-                push_success=true
-              fi
-            fi
-            
-            if [ "$push_success" = true ]; then
-              echo
-              gum style \
-                --foreground 121 \
-                --align left --width 40 --margin "1 2" \
-                "📤 Pushed '$bookmark' to remote"
-            fi
-          fi
-        fi
-        else
-          echo "❌ Commit canceled - no branch selected."
-        fi
-      else
-        echo "No message entered."
-      fi
-      ;;
-    squash)
-      if gum confirm "Do you want to squash the current work into the parent commit"; then
-        jj squash
-        echo
-        jj log --limit 3
-        gum style \
-          --foreground 121 \
-          --align left --width 40 --margin "1 2" \
-          '✅ Squashed work to parent'
-      fi
-      ;;
-    bookmark)
-      while true; do
-        bookmark_action=$(gum choose \
-          "new - Create new branch/bookmark for feature development" \
-          "switch - Switch to existing branch/bookmark" \
-          "move - Relocate existing bookmark to different revision" \
-          "create - Create new bookmark at specific revision" \
-          "delete - Remove an existing bookmark" \
-          "list - Display all bookmarks" \
-          "back - Return to main menu" \
-          --header "Bookmarks & Branches (in Jujutsu, branches are bookmarks):" | cut -d' ' -f1)
-        case "$bookmark_action" in
-        new)
-          if gum confirm "Do you want to create a new branch/bookmark?"; then
-            BOOKMARK=$(gum input --placeholder "Name your branch/bookmark")
-            if [ -n "$BOOKMARK" ]; then
-              jj new @-
-              echo
-              jj bookmark create "$BOOKMARK" -r @-
-              echo
-              jj log --limit 3
-              gum style \
-                --foreground 121 \
-                --align left --width 40 --margin "1 2" \
-                "✅ Created new branch/bookmark '$BOOKMARK'"
-            else
-              echo "❌ No branch name provided."
-            fi
-          fi
-          break
-          ;;
-        switch)
-          current_bookmark=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Switch to branch/bookmark:")
-          if [ -n "$current_bookmark" ]; then
-            jj new "$current_bookmark"
-            echo
-            jj log --limit 3
-            gum style \
-              --foreground 121 \
-              --align left --width 40 --margin "1 2" \
-              "✅ Switched to branch/bookmark '$current_bookmark'"
-          else
-            echo "❌ No branch selected."
-          fi
-          break
-          ;;
-        move)
-          bookmark_source=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a bookmark to move")
-          if [ -n "$bookmark_source" ]; then
-            echo "you are moving the bookmark $bookmark_source"
-            bookmark_destination=$({
-              jj bookmark list | sed 's/:.*//'
-              printf "@\n@-\n"
-            } | gum choose --header="Choose where to move the bookmark")
-            if [ -n "$bookmark_destination" ]; then
-              echo
-              jj bookmark move -f "$bookmark_source" -t "$bookmark_destination"
-              echo
-              jj log --limit 3
-              gum style \
-                --foreground 121 \
-                --align left --width 40 --margin "1 2" \
-                '✅ Moved a bookmark'
-            else
-              echo "❌ No destination selected."
-            fi
-          else
-            echo "❌ No bookmark selected."
-          fi
-          break
-          ;;
-        create)
-          bookmark_name=$(gum input --header="Create new bookmark" --placeholder="Enter bookmark name")
-          if [ -n "$bookmark_name" ]; then
-            bookmark_location=$({
-              printf "@\n@-\n"
-              jj bookmark list | sed 's/:.*//'
-            } | gum choose --header="Choose location for new bookmark")
-            if [ -n "$bookmark_location" ]; then
-              echo
-              jj bookmark create "$bookmark_name" -r "$bookmark_location"
-              echo
-              jj log --limit 3
-              gum style \
-                --foreground 121 \
-                --align left --width 40 --margin "1 2" \
-                "✅ Created bookmark $bookmark_name"
-            else
-              echo "❌ No location selected."
-            fi
-          else
-            echo "❌ No bookmark name provided."
-          fi
-          break
-          ;;
-        delete)
-          bookmark_to_delete=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose bookmark to delete")
-          if [ -n "$bookmark_to_delete" ]; then
-            if gum confirm "Do you want to delete bookmark '$bookmark_to_delete'?"; then
-              echo
-              jj bookmark delete "$bookmark_to_delete"
-              echo
-              jj log --limit 3
-              gum style \
-                --foreground 121 \
-                --align left --width 40 --margin "1 2" \
-                "🗑️ Deleted bookmark $bookmark_to_delete"
-            else
-              echo "❌ Bookmark deletion canceled."
-            fi
-          else
-            echo "❌ No bookmark selected."
-          fi
-          break
-          ;;
-        list)
-          echo "Current bookmarks:"
-          jj bookmark list
-          gum style \
-            --foreground 121 \
-            --align left --width 40 --margin "1 2" \
-            'ℹ️ Listed all bookmarks'
-          # Continue loop to stay in bookmark menu
-          ;;
-        back)
-          break
-          ;;
-        *)
-          echo "❌ Canceled action"
-          break
-          ;;
-        esac
-      done
-      ;;
-    remote)
-      while true; do
-        # Check if remotes exist and show appropriate menu
-        if jj git remote list | grep -q .; then
-          # Show full menu when remotes exist
-          remote_action=$(gum choose \
-            "push - Push a bookmark to remote" \
-            "pull - Fetch changes from remote" \
-            "list - Display all configured remotes" \
-            "add - Add a new remote for existing repo" \
-            "remove - Remove an existing remote" \
-            "create - Create new GitHub repo and push" \
-            "back - Return to main menu" \
-            --header "Choose a remote action:" | cut -d' ' -f1)
-        else
-          # Show limited menu when no remotes exist
-          remote_action=$(gum choose \
-            "add - Add a new remote for existing repo" \
-            "create - Create new GitHub repo and push" \
-            "list - Display all configured remotes" \
-            "back - Return to main menu" \
-            --header "No remotes found. Choose an action:" | cut -d' ' -f1)
-        fi
-        case "$remote_action" in
-        push)
-          push_source=$(jj bookmark list | grep -v '^\s*@' | sed 's/:.*//' | gum choose --header="Choose a bookmark to push")
-          if [ -z "$push_source" ]; then
-            echo "❌ No bookmark selected."
-            break
-          fi
-          
-          remote_destination=$({
-            jj git remote list | sed 's/ .*//'
-            printf "new branch"
-          } | gum choose --header="Choose a remote branch")
-          if [ -z "$remote_destination" ]; then
-            echo "❌ No remote destination selected."
-            break
-          fi
-          
-          if [[ $remote_destination == *new* ]]; then
-            jj git push -b "$push_source"
-            echo
-          else
-            jj git push -b "$push_source" --remote "$remote_destination"
-            echo
-          fi
-          gum style \
-            --foreground 121 \
-            --align left --width 40 --margin "1 2" \
-            "📤 Pushed bookmark \"$push_source\" to remote branch \"$remote_destination\""
-          break
-          ;;
-        pull)
-          jj git pull
-          echo
-          jj log --limit 3
-          gum style \
-            --foreground 121 \
-            --align left --width 40 --margin "1 2" \
-            '🔄 Pulled from remote'
-          break
-          ;;
-        add)
-          new_remote_name=$(gum input --header="Add a new remote" --placeholder="Choose remote name")
-          new_remote_url=$(gum input --header="Input remote SSH URL" --placeholder="git@github.com:<USER>/<REPO>.git")
-          if [ -n "$new_remote_name" ] && [ -n "$new_remote_url" ]; then
-            jj git remote add "$new_remote_name" "$new_remote_url"
-            echo
-            jj git remote list
-            gum style \
-              --foreground 121 \
-              --align left --width 40 --margin "1 2" \
-              "✅ Added remote $new_remote_name"
-          else
-            echo "❌ Remote name or URL not provided. Canceled."
-          fi
-          break
-          ;;
-        remove)
-          remote_to_remove=$(jj git remote list | sed 's/ .*//' | gum choose --header="Choose a remote to remove")
-          if [ -n "$remote_to_remove" ]; then
-            if gum confirm "Do you want to remove remote '$remote_to_remove'?"; then
-              jj git remote remove "$remote_to_remove"
-              echo
-              jj git remote list
-              gum style \
-                --foreground 121 \
-                --align left --width 40 --margin "1 2" \
-                "✅ Removed remote $remote_to_remove"
-            else
-              echo "❌ Remote removal canceled."
-            fi
-          else
-            echo "❌ No remote selected."
-          fi
-          break
-          ;;
-        create)
-          # Get GitHub username
-          github_user=$(gh api user --jq '.login')
-          if [ $? -ne 0 ] || [ -z "$github_user" ]; then
-            echo "❌ Error: Could not get GitHub username. Check your authentication."
-            exit 1
-          fi
-
-          # Ask for repo name
-          repo_name=$(gum input --header="Create GitHub repository" --placeholder="Enter repository name")
-          if [ -z "$repo_name" ]; then
-            echo "❌ No repository name provided. Canceled."
-            continue
-          fi
-
-          # Ask for visibility
-          visibility=$(gum choose \
-            "private - Repository visible only to you and collaborators" \
-            "public - Repository visible to everyone on GitHub" \
-            --header "Repository visibility:" | cut -d' ' -f1)
-          
-          if [ -z "$visibility" ]; then
-            echo "❌ Repository creation canceled."
-            break
-          fi
-          
-          visibility_flag=""
-          if [ "$visibility" = "public" ]; then
-            visibility_flag="--public"
-          else
-            visibility_flag="--private"
-          fi
-
-          # Create the repository
-          echo "Creating repository $github_user/$repo_name..."
-          if gh repo create "$repo_name" $visibility_flag; then
-            echo
-            # Add as remote
-            remote_url="git@github.com:$github_user/$repo_name.git"
-            jj git remote add origin "$remote_url"
-            echo
-
-            # Ask which bookmark/branch to push
-            push_source=$(jj bookmark list | grep -v '^\s*@' | sed 's/:.*//' | gum choose --header="Choose a bookmark to push to new repo")
-            if [ -n "$push_source" ]; then
-              if gum confirm "Push '$push_source' to the new GitHub repository?"; then
-                jj git push -b "$push_source"
-                gum style \
-                  --foreground 121 \
-                  --align left --width 50 --margin "1 2" \
-                  "✅ Created repo $github_user/$repo_name and pushed $push_source"
-              fi
-            fi
-          else
-            echo "❌ Error: Failed to create repository. It may already exist."
-          fi
-          break
-          ;;
-        list)
-          echo "Current remotes:"
-          jj git remote list
-          if ! jj git remote list | grep -q .; then
-            echo "No remotes configured."
-          fi
-          gum style \
-            --foreground 121 \
-            --align left --width 40 --margin "1 2" \
-            'ℹ️ Listed all remotes'
-          # Continue loop to stay in remote menu
-          ;;
-        back)
-          break
-          ;;
-        *)
-          echo "❌ Canceled action"
-          break
-          ;;
-        esac
-      done
-      ;;
-    abandon)
-      if gum confirm "Do you want to abandon the current work"; then
-        jj abandon --retain-bookmarks
-        echo
-        jj log --limit 3
-        gum style \
-          --foreground 121 \
-          --align left --width 40 --margin "1 2" \
-          '🗑️ Abandoned current work'
-      fi
-      ;;
-    exit)
-      break
-      ;;
-    *)
-      echo "❌ No action taken!"
-      ;;
-    esac
   done
 
-  exit 0
+  if ! gh auth status >/dev/null 2>&1; then
+    echo "❌ Error: GitHub CLI is not authenticated. Run 'gh auth login' first."
+    exit 1
+  fi
+}
 
-# Case 4: Both .jj and .git exist colocate
-elif $has_jj && $has_git; then
+log_success() {
+  gum style "${GUM_STYLE_SUCCESS[@]}" "$1"
+}
 
-  while true; do
-    jj st
-    echo
+log_error() {
+  echo "❌ $1"
+}
 
-    action=$(gum choose \
-      "commit - Create commits with Git branch synchronization" \
-      "squash - Squash changes while maintaining Git compatibility" \
-      "abandon - Safely discard changes in both systems" \
-      "new - Create new empty revision for experimentation/WIP work" \
-      "bookmark - Manage bookmarks and branches (branches are bookmarks in Jujutsu)" \
-      "remote - Push, pull, and manage remote repositories" \
-      "exit - Exit the script" \
-      --header "Choose your action:" | cut -d' ' -f1)
+confirm_action() {
+  gum confirm "$1"
+}
 
-  case "$action" in
-  commit)
-    # Ask if user wants AI generation
-    if gum confirm "Generate commit message with AI?"; then
-      # Generate default commit message with jjlama
-      DEFAULT_MESSAGE=$(gum spin --spinner dot --title "Generating commit message..." --show-output -- bash -c "jjlama 2>/dev/null" || echo "")
+show_header() {
+  gum style "${GUM_OPTS[@]}" 'Jays' 'Jujutsu Git helper'
+}
+
+# ==========================================
+# Initialization Logic
+# ==========================================
+
+init_repository() {
+  # Check existence of folders
+  local has_git=false
+  local has_jj=false
+  [ -d .git ] && has_git=true
+  [ -d .jj ] && has_jj=true
+
+  if ! $has_git && ! $has_jj; then
+    init=$(gum choose \
+      "standalone - Pure Jujutsu setup for modern version control" \
+      "colocate - Initialize with Git integration for existing workflows" \
+      "cancel - Exit without initializing" \
+      --header "No .git or .jj found. How do you want to initialize JJ?" | cut -d' ' -f1)
+
+    case "$init" in
+    colocate)
+      echo
+      gum style --foreground 212 --border-foreground 62 --border rounded --align left --padding "1 2" --margin "0 2" \
+        "Colocated setup will create:" "" "• Git repository (.git)" "• Jujutsu with Git integration (.jj)" \
+        "• Initial commit in both systems" "• Branch synchronization between Git and Jujutsu" "" "Location: $(pwd)"
+      echo
       
-      if [ -n "$DEFAULT_MESSAGE" ]; then
-        # Show the generated message
+      if confirm_action "Proceed with colocated initialization?"; then
+        git init
+        BRANCH=$(git branch --show-current)
         echo
-        echo "Generated commit message:"
-        gum style --border rounded --padding "1 2" --margin "1 0" -- \
-          "$DEFAULT_MESSAGE"
+        jj git init --colocate
         echo
+        jj bookmark create "$BRANCH" -r @
+        echo
+        jj commit -m "initial commit"
+        echo
+        git switch "$BRANCH"
+        IS_COLOCATED=true
+      else
+        log_error "Initialization canceled."
+        exit 0
+      fi
+      ;;
+    standalone)
+      echo
+      gum style --foreground 212 --border-foreground 62 --border rounded --align left --padding "1 2" --margin "0 2" \
+        "Standalone setup will create:" "" "• Pure Jujutsu repository (.jj)" "• First bookmark (you will name it)" \
+        "• Initial commit" "• No Git integration" "" "Location: $(pwd)"
+      echo
       
-      # Present options
+      if confirm_action "Proceed with standalone initialization?"; then
+        jj git init
+        echo
+        echo "Create the first bookmark"
+        BOOKMARK=$(gum input --placeholder "name your bookmark")
+        if [ -n "$BOOKMARK" ]; then
+          jj bookmark create "$BOOKMARK" -r @
+          echo
+          jj commit -m "initial commit"
+          IS_STANDALONE=true
+        else
+          log_error "No bookmark name provided. Initialization canceled."
+          exit 0
+        fi
+      else
+        log_error "Initialization canceled."
+        exit 0
+      fi
+      ;;
+    cancel)
+      log_error "Initialization canceled."
+      exit 0
+      ;;
+    esac
+    exit 0
+
+  elif $has_git && ! $has_jj; then
+    echo "Found Git repo but no JJ repo."
+    if confirm_action "Do you want to initialize JJ and link it to the existing Git repo?"; then
+      jj git init --git-repo .
+      echo "JJ initialized and linked to Git repo."
+    else
+      log_error "JJ initialization canceled."
+    fi
+    exit 0
+  fi
+
+  # Set global state for existing repos
+  if $has_jj && $has_git; then
+    IS_COLOCATED=true
+  elif $has_jj; then
+    IS_STANDALONE=true
+  fi
+}
+
+# ==========================================
+# Core Actions
+# ==========================================
+
+get_commit_message() {
+  local message=""
+  
+  if confirm_action "Generate commit message with AI?"; then
+    # Generate default commit message with jjlama
+    local default_msg
+    default_msg=$(gum spin --spinner dot --title "Generating commit message..." --show-output -- bash -c "jjlama 2>/dev/null" || echo "")
+    
+    if [ -n "$default_msg" ]; then
+      echo
+      echo "Generated commit message:"
+      gum style "${GUM_STYLE_COMMIT[@]}" "$default_msg"
+      echo
+      
       while true; do
-        choice=$(gum choose \
-          "accept - Use this message and continue" \
-          "edit - Modify this message" \
-          "regenerate - Generate a new message" \
-          "cancel - Return to main menu" \
-          --header "What would you like to do?" | cut -d' ' -f1)
+        local choice
+        choice=$(gum choose "accept" "edit" "regenerate" "cancel" --header "What would you like to do?")
         
         case "$choice" in
         accept)
-          MESSAGE="$DEFAULT_MESSAGE"
+          message="$default_msg"
           break
           ;;
         edit)
-          MESSAGE=$(gum input --placeholder "Final commit message" --value="$DEFAULT_MESSAGE")
-          if [ -n "$MESSAGE" ]; then
-            break
-          else
-            echo "❌ No message provided. Please try again or choose cancel."
-          fi
+          message=$(gum input --placeholder "Final commit message" --value="$default_msg")
+          [ -n "$message" ] && break || log_error "No message provided."
           ;;
         regenerate)
-          DEFAULT_MESSAGE=$(gum spin --spinner dot --title "Regenerating commit message..." --show-output -- bash -c "jjlama 2>/dev/null" || echo "")
-          if [ -n "$DEFAULT_MESSAGE" ]; then
-            echo
-            echo "Generated commit message:"
-            gum style --border rounded --padding "1 2" --margin "1 0" -- \
-              "$DEFAULT_MESSAGE"
-            echo
-          else
-            echo "❌ Failed to generate message"
+            default_msg=$(gum spin --spinner dot --title "Regenerating commit message..." --show-output -- bash -c "jjlama 2>/dev/null" || echo "")
+            if [ -n "$default_msg" ]; then
+               echo; echo "Generated commit message:"; gum style "${GUM_STYLE_COMMIT[@]}" "$default_msg"; echo
+            else
+             echo "❌ Failed to generate message"
           fi
           ;;
         cancel)
           echo "❌ Commit canceled."
-          MESSAGE=""
-          break
-          ;;
-        *)
-          echo "❌ No option selected."
-          MESSAGE=""
-          break
+          return 1
           ;;
         esac
       done
-      else
-        # Fallback if jjlama not available
-        MESSAGE=$(gum input --placeholder "Final commit message")
-      fi
     else
-      # User chose manual input
-      MESSAGE=$(gum input --placeholder "Final commit message")
+      # Fallback if jjlama returns empty
+      message=$(gum input --placeholder "Final commit message")
     fi
+  else
+    message=$(gum input --placeholder "Final commit message")
+  fi
+  
+  if [ -z "$message" ]; then
+    echo "No message entered."
+    return 1
+  fi
+  
+  echo "$message"
+}
+
+action_commit() {
+  local message
+  message=$(get_commit_message) || return
+
+  local target_bookmark
+  
+  # For standalone, we might want to let user pick a bookmark if multiple exist, 
+  # or just commit to current. The original script behavior for standalone was confusing:
+  # it asked "Choose a branch to commit to" then committed and moved it.
+  # For colocated, it used current git branch.
+  
+  if $IS_COLOCATED; then
+    local branch
+    branch=$(git branch --show-current)
+    jj commit --message="$message"
+    echo
+    # Sync git branch
+    jj bookmark move --from 'heads(::@- & bookmarks())' --to @-
+    echo
+    git switch "$branch"
+    echo
+    jj log --limit 3
+    log_success "Created a new commit on $branch"
     
-    BRANCH=$(git branch --show-current)
-    if [ -n "$MESSAGE" ] && [ "${#MESSAGE}" -gt 0 ]; then
-      jj commit --message="$MESSAGE"
+    # Prompt to push
+    try_push_bookmark "$branch"
+  else
+    # Standalone behavior - mimics original "commit to specific bookmark" flow
+    target_bookmark=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a branch to commit to")
+    if [ -n "$target_bookmark" ]; then
+      jj commit --message="$message"
       echo
-      jj bookmark move --from 'heads(::@- & bookmarks())' --to @-
+      jj bookmark move "$target_bookmark" --from "$target_bookmark" --to @-
       echo
-      git switch "$BRANCH"
+      log_success "Committed to $target_bookmark"
       echo
       jj log --limit 3
-      gum style \
-        --foreground 121 \
-        --align left --width 40 --margin "1 2" \
-        '✅ Created a new commit'
+      
+      try_push_bookmark "$target_bookmark"
+    else
+      log_error "Commit canceled - no branch selected."
+    fi
+  fi
+}
 
-      # Check if remotes exist and ask to push
-      if jj git remote list | grep -q .; then
-        if gum confirm "Push '$BRANCH' to remote?"; then
-          # Check if multiple remotes exist
-          remote_count=$(jj git remote list | wc -l)
-          push_success=false
-          if [ "$remote_count" -gt 1 ]; then
-            selected_remote=$(jj git remote list | sed 's/ .*//' | gum choose --header="Choose remote to push to:")
-            if [ -n "$selected_remote" ]; then
-              echo
-              if jj git push -b "$BRANCH" --remote "$selected_remote"; then
-                push_success=true
-              fi
-            else
-              echo "❌ No remote selected."
-            fi
-          else
-            echo
-            if jj git push -b "$BRANCH"; then
-              push_success=true
-            fi
-          fi
-          
-          if [ "$push_success" = true ]; then
-            echo
-            gum style \
-              --foreground 121 \
-              --align left --width 40 --margin "1 2" \
-              "📤 Pushed '$BRANCH' to remote"
-          fi
-        fi
+try_push_bookmark() {
+  local bookmark="$1"
+  if jj git remote list | grep -q .; then
+    if confirm_action "Push '$bookmark' to remote?"; then
+      local remote_count
+      remote_count=$(jj git remote list | wc -l)
+      local push_success=false
+      
+      if [ "$remote_count" -gt 1 ]; then
+        local selected_remote
+        selected_remote=$(jj git remote list | sed 's/ .*//' | gum choose --header="Choose remote to push to:")
+        [ -n "$selected_remote" ] && jj git push -b "$bookmark" --remote "$selected_remote" && push_success=true
+      else
+        jj git push -b "$bookmark" && push_success=true
       fi
 
-    else
-      echo "No message entered."
+      if [ "$push_success" = true ]; then
+        log_success "Pushed '$bookmark' to remote"
+      fi
     fi
-    ;;
-  squash)
-    if gum confirm "Do you want to squash the current work into the parent commit"; then
-      BRANCH=$(git branch --show-current)
+  fi
+}
+
+action_squash() {
+  if gum confirm "Do you want to squash the current work into the parent commit"; then
+    if $IS_COLOCATED; then
+      local branch
+      branch=$(git branch --show-current)
       jj squash
       echo
-      git switch "$BRANCH"
+      git switch "$branch"
+    else
+      jj squash
+    fi
+    echo
+    jj log --limit 3
+    log_success "Squashed work to parent"
+  fi
+}
+
+action_abandon() {
+  if gum confirm "Do you want to abandon the current work"; then
+    jj abandon --retain-bookmarks
+    echo
+    jj log --limit 3
+    log_success "Abandoned current work"
+  fi
+}
+
+action_new_revision() {
+  if gum confirm "Do you want to create a new revision"; then
+    local base_revision
+    if $IS_COLOCATED; then
+        local branch
+        branch=$(git branch --show-current)
+        base_revision=$({ echo "$branch"; echo "@"; echo "@-"; jj bookmark list | sed 's/:.*//' | grep -v "^$branch$"; } | gum choose --header="Choose base for new revision")
+    else
+        base_revision=$({ echo "@"; echo "@-"; jj bookmark list | sed 's/:.*//'; } | gum choose --header="Choose base for new revision")
+    fi
+
+    if [ -n "$base_revision" ]; then
+      jj new "$base_revision"
       echo
-      jj log --limit 3
-      gum style \
-        --foreground 121 \
-        --align left --width 40 --margin "1 2" \
-        '✅ Squashed work to parent'
+      log_success "Created new revision from $base_revision"
+    else
+      log_error "No base selected."
     fi
-    ;;
-  abandon)
-    if gum confirm "Do you want to abandon the current work"; then
-      jj abandon --retain-bookmarks
-      echo
-      jj log --limit 3
-      gum style \
-        --foreground 121 \
-        --align left --width 40 --margin "1 2" \
-        '🗑️ Abandoned current work'
-    fi
-    ;;
-  new)
-    if gum confirm "Do you want to create a new revision"; then
-      CURRENT_BRANCH=$(git branch --show-current)
-      newCommitBase=$({
-        echo "$CURRENT_BRANCH"
-        echo "@"
-        echo "@-"  
-        jj bookmark list | sed 's/:.*//' | grep -v "^$CURRENT_BRANCH$"
-      } | gum choose --header="Choose base for new revision")
-      if [ -n "$newCommitBase" ]; then
-        jj new "$newCommitBase"
-        echo
-        gum style \
-          --foreground 121 \
-          --align left --width 40 --margin "1 2" \
-          "✅ Created new revision from $newCommitBase"
-      else
-        echo "❌ No base selected."
-      fi
-    fi
-    ;;
-  bookmark)
-    while true; do
-      bookmark_action=$(gum choose \
-        "new - Create new branch/bookmark for feature development" \
-        "switch - Switch to existing branch/bookmark" \
-        "move - Move bookmark to different revision" \
-        "create - Create bookmark at specific revision" \
-        "delete - Remove bookmark/branch" \
-        "list - Display all bookmarks/branches" \
-        "back - Return to main menu" \
-        --header "Bookmarks & Branches (in Jujutsu, branches are bookmarks):" | cut -d' ' -f1)
-      case "$bookmark_action" in
-      new)
-        if gum confirm "Do you want to create a new branch/bookmark?"; then
-          BOOKMARK=$(gum input --placeholder "Name your branch/bookmark")
-          if [ -n "$BOOKMARK" ]; then
-            jj new @-
-            echo
-            jj bookmark create "$BOOKMARK" -r @-
-            echo
-            jj log --limit 3
-            gum style \
-              --foreground 121 \
-              --align left --width 40 --margin "1 2" \
-              "✅ Created new branch/bookmark '$BOOKMARK'"
-          else
-            echo "❌ No branch name provided."
-          fi
-        fi
-        break
-        ;;
-      switch)
-        current_bookmark=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Switch to branch/bookmark:")
-        if [ -n "$current_bookmark" ]; then
-          jj new "$current_bookmark"
+  fi
+}
+
+action_bookmarks() {
+  while true; do
+    local action
+    action=$(gum choose \
+      "new - Create new branch/bookmark" \
+      "switch - Switch to existing branch/bookmark" \
+      "move - Move existing bookmark to different revision" \
+      "create - Create new bookmark at specific revision" \
+      "delete - Remove an existing bookmark" \
+      "list - Display all bookmarks" \
+      "back - Return to main menu" \
+      --header "Bookmarks & Branches:" | cut -d' ' -f1)
+
+    case "$action" in
+    new)
+      if confirm_action "Create a new branch/bookmark?"; then
+        local name
+        name=$(gum input --placeholder "Name your branch/bookmark")
+        if [ -n "$name" ]; then
+          jj new @-
+          echo
+          jj bookmark create "$name" -r @-
           echo
           jj log --limit 3
-          gum style \
-            --foreground 121 \
-            --align left --width 40 --margin "1 2" \
-            "✅ Switched to branch/bookmark '$current_bookmark'"
+          log_success "Created and switched to '$name'"
         else
-          echo "❌ No branch selected."
+          log_error "No name provided."
         fi
-        break
-        ;;
-      move)
-        bookmark_source=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a bookmark to move")
-        if [ -n "$bookmark_source" ]; then
-          echo "you are moving the bookmark $bookmark_source"
-          bookmark_destination=$({
-            jj bookmark list | sed 's/:.*//'
-            printf "@\n@-\n"
-          } | gum choose --header="Choose where to move the bookmark")
-          if [ -n "$bookmark_destination" ]; then
-            echo
-            jj bookmark move -f "$bookmark_source" -t "$bookmark_destination"
-            echo
-            jj log --limit 3
-            gum style \
-              --foreground 121 \
-              --align left --width 40 --margin "1 2" \
-              '✅ Moved a bookmark'
-          else
-            echo "❌ No destination selected."
-          fi
-        else
-          echo "❌ No bookmark selected."
-        fi
-        break
-        ;;
-      create)
-        bookmark_name=$(gum input --header="Create new bookmark" --placeholder="Enter bookmark name")
-        if [ -n "$bookmark_name" ]; then
-          bookmark_location=$({
-            printf "@\n@-\n"
-            jj bookmark list | sed 's/:.*//'
-          } | gum choose --header="Choose location for new bookmark")
-          if [ -n "$bookmark_location" ]; then
-            echo
-            jj bookmark create "$bookmark_name" -r "$bookmark_location"
-            echo
-            jj log --limit 3
-            gum style \
-              --foreground 121 \
-              --align left --width 40 --margin "1 2" \
-              "✅ Created bookmark $bookmark_name"
-          else
-            echo "❌ No location selected."
-          fi
-        else
-          echo "❌ No bookmark name provided."
-        fi
-        break
-        ;;
-      delete)
-        bookmark_to_delete=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose bookmark to delete")
-        if [ -n "$bookmark_to_delete" ]; then
-          if gum confirm "Do you want to delete bookmark '$bookmark_to_delete'?"; then
-            echo
-            jj bookmark delete "$bookmark_to_delete"
-            echo
-            jj log --limit 3
-            gum style \
-              --foreground 121 \
-              --align left --width 40 --margin "1 2" \
-              "🗑️ Deleted bookmark $bookmark_to_delete"
-          else
-            echo "❌ Bookmark deletion canceled."
-          fi
-        else
-          echo "❌ No bookmark selected."
-        fi
-        break
-        ;;
-      list)
-        echo "Current bookmarks:"
-        jj bookmark list
-        echo
-        gum style \
-          --foreground 121 \
-          --align left --width 40 --margin "1 2" \
-          'ℹ️ Listed all bookmarks'
-        # Continue loop to stay in bookmark menu
-        ;;
-      back)
-        break
-        ;;
-      *)
-        echo "❌ Canceled action"
-        break
-        ;;
-      esac
-    done
-    ;;
-  remote)
-    while true; do
-      # Check if remotes exist and show appropriate menu
-      if jj git remote list | grep -q .; then
-        # Show full menu when remotes exist
-        remote_action=$(gum choose \
-          "push - Push a bookmark to remote" \
-          "pull - Fetch changes from remote" \
-          "list - Display all configured remotes" \
-          "add - Add a new remote for existing repo" \
-          "remove - Remove an existing remote" \
-          "create - Create new GitHub repo and push" \
-          "back - Return to main menu" \
-          --header "Choose a remote action:" | cut -d' ' -f1)
-      else
-        # Show limited menu when no remotes exist
-        remote_action=$(gum choose \
-          "add - Add a new remote for existing repo" \
-          "create - Create new GitHub repo and push" \
-          "list - Display all configured remotes" \
-          "back - Return to main menu" \
-          --header "No remotes found. Choose an action:" | cut -d' ' -f1)
       fi
-      case "$remote_action" in
-      push)
-        CURRENT_BRANCH=$(git branch --show-current)
-        remote_destination=$({
-          jj git remote list | sed 's/ .*//'
-          printf "new branch"
-        } | gum choose --header="Choose a remote branch")
-        if [ -z "$remote_destination" ]; then
-          echo "❌ No remote destination selected."
-          break
-        fi
-        
-        if [[ $remote_destination == *new* ]]; then
-          jj git push -b "$CURRENT_BRANCH"
-          echo
-        else
-          jj git push -b "$CURRENT_BRANCH" --remote "$remote_destination"
-          echo
-        fi
-        gum style \
-          --foreground 121 \
-          --align left --width 40 --margin "1 2" \
-          "📤 Pushed branch '$CURRENT_BRANCH' to remote"
-        break
-        ;;
-      pull)
-        jj git pull
+      ;;
+    switch)
+      local target
+      target=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Switch to branch/bookmark:")
+      if [ -n "$target" ]; then
+        jj new "$target"
         echo
         jj log --limit 3
-        gum style \
-          --foreground 121 \
-          --align left --width 40 --margin "1 2" \
-          '🔄 Pulled from remote'
-        break
-        ;;
-      add)
-        new_remote_name=$(gum input --header="Add a new remote" --placeholder="Choose remote name")
-        new_remote_url=$(gum input --header="Input remote SSH URL" --placeholder="git@github.com:<USER>/<REPO>.git")
-        if [ -n "$new_remote_name" ] && [ -n "$new_remote_url" ]; then
-          jj git remote add "$new_remote_name" "$new_remote_url"
+        log_success "Switched to '$target'"
+      else
+        log_error "No branch selected."
+      fi
+      ;;
+    move)
+      local src
+      src=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose a bookmark to move")
+      if [ -n "$src" ]; then
+        echo "Moving bookmark $src"
+        local dest
+        dest=$({ jj bookmark list | sed 's/:.*//'; printf "@\n@-\n"; } | gum choose --header="Choose where to move the bookmark")
+        if [ -n "$dest" ]; then
+          jj bookmark move -f "$src" -t "$dest"
           echo
-          jj git remote list
-          gum style \
-            --foreground 121 \
-            --align left --width 40 --margin "1 2" \
-            "✅ Added remote $new_remote_name"
+          jj log --limit 3
+          log_success "Moved bookmark"
         else
-          echo "❌ Remote name or URL not provided. Canceled."
+          log_error "No destination selected."
         fi
-        break
-        ;;
-      remove)
-        remote_to_remove=$(jj git remote list | sed 's/ .*//' | gum choose --header="Choose a remote to remove")
-        if [ -n "$remote_to_remove" ]; then
-          if gum confirm "Do you want to remove remote '$remote_to_remove'?"; then
-            jj git remote remove "$remote_to_remove"
-            echo
-            jj git remote list
-            gum style \
-              --foreground 121 \
-              --align left --width 40 --margin "1 2" \
-              "✅ Removed remote $remote_to_remove"
-          else
-            echo "❌ Remote removal canceled."
-          fi
-        else
-          echo "❌ No remote selected."
-        fi
-        break
-        ;;
-      create)
-        # Get GitHub username
-        github_user=$(gh api user --jq '.login')
-        if [ $? -ne 0 ] || [ -z "$github_user" ]; then
-          echo "❌ Error: Could not get GitHub username. Check your authentication."
-          continue
-        fi
-        
-        # Ask for repo name
-        repo_name=$(gum input --header="Create GitHub repository" --placeholder="Enter repository name")
-        if [ -z "$repo_name" ]; then
-          echo "❌ No repository name provided. Canceled."
-          continue
-        fi
-        
-        # Ask for visibility
-        visibility=$(gum choose \
-          "private - Repository visible only to you and collaborators" \
-          "public - Repository visible to everyone on GitHub" \
-          --header "Repository visibility:" | cut -d' ' -f1)
-        
-        if [ -z "$visibility" ]; then
-          echo "❌ Repository creation canceled."
-          break
-        fi
-        
-        visibility_flag=""
-        if [ "$visibility" = "public" ]; then
-          visibility_flag="--public"
-        else
-          visibility_flag="--private"
-        fi
-        
-        # Create the repository
-        echo "Creating repository $github_user/$repo_name..."
-        if gh repo create "$repo_name" $visibility_flag; then
+      else
+        log_error "No bookmark selected."
+      fi
+      ;;
+    create)
+      local name
+      name=$(gum input --header="Create new bookmark" --placeholder="Enter bookmark name")
+      if [ -n "$name" ]; then
+        local loc
+        loc=$({ printf "@\n@-\n"; jj bookmark list | sed 's/:.*//'; } | gum choose --header="Choose location for new bookmark")
+        if [ -n "$loc" ]; then
+          jj bookmark create "$name" -r "$loc"
           echo
-          # Add as remote
-          remote_url="git@github.com:$github_user/$repo_name.git"
-          jj git remote add origin "$remote_url"
-          echo
-          
-          # Push current Git branch
-          CURRENT_BRANCH=$(git branch --show-current)
-          if gum confirm "Push '$CURRENT_BRANCH' to the new GitHub repository?"; then
-            jj git push -b "$CURRENT_BRANCH"
-            echo
-            gum style \
-              --foreground 121 \
-              --align left --width 50 --margin "1 2" \
-              "✅ Created repo $github_user/$repo_name and pushed $CURRENT_BRANCH"
-          fi
+          jj log --limit 3
+          log_success "Created bookmark $name"
         else
-          echo "❌ Error: Failed to create repository. It may already exist."
+          log_error "No location selected."
         fi
-        break
-        ;;
-      list)
-        echo "Current remotes:"
-        jj git remote list
-        if ! jj git remote list | grep -q .; then
-          echo "No remotes configured."
+      else
+        log_error "No name provided."
+      fi
+      ;;
+    delete)
+      local target
+      target=$(jj bookmark list | sed 's/:.*//' | gum choose --header="Choose bookmark to delete")
+      if [ -n "$target" ]; then
+        if confirm_action "Delete bookmark '$target'?"; then
+          jj bookmark delete "$target"
+          echo
+          jj log --limit 3
+          log_success "Deleted bookmark $target"
         fi
-        echo
-        gum style \
-          --foreground 121 \
-          --align left --width 40 --margin "1 2" \
-          'ℹ️ Listed all remotes'
-        # Continue loop to stay in remote menu
-        ;;
-      back)
-        break
-        ;;
-      *)
-        echo "❌ Canceled action"
-        break
-        ;;
-      esac
-    done
-    ;;
-  exit)
-    break
-    ;;
-  *)
-    echo "❌ No action taken!"
-    ;;
-  esac
+      else
+        log_error "No bookmark selected."
+      fi
+      ;;
+    list)
+      echo "Current bookmarks:"
+      jj bookmark list
+      gum style "${GUM_STYLE_INFO[@]}" 'Listed all bookmarks'
+      ;;
+    back) return ;;
+    *) log_error "Canceled action" ;;
+    esac
   done
+}
 
-  exit 0
+action_remotes() {
+  while true; do
+    local opts
+    if jj git remote list | grep -q .; then
+      opts=("push - Push a bookmark to remote" "pull - Fetch changes from remote" "list - Display remotes" "add - Add new remote" "remove - Remove remote" "create - Create & push to new GitHub repo" "back - Return")
+    else
+      opts=("add - Add new remote" "create - Create & push to new GitHub repo" "list - Display remotes" "back - Return")
+    fi
 
-fi
+    local action
+    action=$(gum choose "${opts[@]}" --header "Choose a remote action:" | cut -d' ' -f1)
+
+    case "$action" in
+    push)
+      local src
+      # Default to current branch for colocated, or ask for bookmark
+      if $IS_COLOCATED; then
+        src=$(git branch --show-current)
+      else
+        src=$(jj bookmark list | grep -v '^\s*@' | sed 's/:.*//' | gum choose --header="Choose a bookmark to push")
+      fi
+      
+      [ -z "$src" ] && { log_error "No bookmark selected."; continue; }
+
+      local dest
+      dest=$({ jj git remote list | sed 's/ .*//'; printf "new branch"; } | gum choose --header="Choose a remote branch")
+      [ -z "$dest" ] && { log_error "No destination selected."; continue; }
+
+      if [[ "$dest" == *new* ]]; then
+        jj git push -b "$src"
+      else
+        jj git push -b "$src" --remote "$dest"
+      fi
+      log_success "Pushed '$src' to remote"
+      ;;
+    pull)
+      jj git pull
+      echo
+      jj log --limit 3
+      log_success "Pulled from remote"
+      ;;
+    add)
+      local name url
+      name=$(gum input --header="Add a new remote" --placeholder="Choose remote name")
+      url=$(gum input --header="Input remote SSH URL" --placeholder="git@github.com:<USER>/<REPO>.git")
+      if [ -n "$name" ] && [ -n "$url" ]; then
+        jj git remote add "$name" "$url"
+        echo
+        jj git remote list
+        log_success "Added remote $name"
+      else
+        log_error "Invalid input."
+      fi
+      ;;
+    remove)
+      local target
+      target=$(jj git remote list | sed 's/ .*//' | gum choose --header="Choose a remote to remove")
+      if [ -n "$target" ] && confirm_action "Remove remote '$target'?"; then
+        jj git remote remove "$target"
+        log_success "Removed remote $target"
+      fi
+      ;;
+    create)
+      local user repo visibility
+      user=$(gh api user --jq '.login') || { log_error "Could not get GitHub username."; continue; }
+      repo=$(gum input --header="Create GitHub repository" --placeholder="Enter repository name")
+      [ -z "$repo" ] && continue
+      
+      visibility=$(gum choose "private" "public" --header "Repository visibility:")
+      [ -z "$visibility" ] && continue
+
+      echo "Creating repository $user/$repo..."
+      if gh repo create "$repo" "--$visibility"; then
+        echo
+        local remote_url="git@github.com:$user/$repo.git"
+        jj git remote add origin "$remote_url"
+        
+        local push_src
+        if $IS_COLOCATED; then
+           push_src=$(git branch --show-current)
+        else
+           push_src=$(jj bookmark list | grep -v '^\s*@' | sed 's/:.*//' | gum choose --header="Choose bookmark to push")
+        fi
+
+        if [ -n "$push_src" ] && confirm_action "Push '$push_src' to new repo?"; then
+          jj git push -b "$push_src"
+          log_success "Created repo and pushed $push_src"
+        fi
+      else
+        log_error "Failed to create repository."
+      fi
+      ;;
+    list)
+      echo "Current remotes:"
+      jj git remote list
+      [ $? -ne 0 ] && echo "No remotes configured."
+      gum style "${GUM_STYLE_INFO[@]}" 'Listed all remotes'
+      ;;
+    back) return ;;
+    *) log_error "Canceled" ;;
+    esac
+  done
+}
+
+# ==========================================
+# Main Execution Loop
+# ==========================================
+
+main() {
+  check_dependencies
+  show_header
+  init_repository
+
+  # Main Loop
+  while true; do
+    echo
+    jj st
+    echo
+
+    local choices=(
+      "commit - Create permanent commits (with AI option)"
+      "squash - Merge current work into parent"
+      "abandon - Discard current changes"
+      "new - Create new empty revision"
+      "bookmark - Manage bookmarks/branches"
+      "remote - Manage remotes (push/pull)"
+      "exit - Exit"
+    )
+
+    local action
+    action=$(gum choose "${choices[@]}" --header "Choose your action:" | cut -d' ' -f1)
+
+    case "$action" in
+      commit)   action_commit ;;
+      squash)   action_squash ;;
+      abandon)  action_abandon ;;
+      new)      action_new_revision ;;
+      bookmark) action_bookmarks ;;
+      remote)   action_remotes ;;
+      exit)     break ;;
+      *)        log_error "Unknown action" ;;
+    esac
+  done
+}
+
+main
