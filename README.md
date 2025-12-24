@@ -22,6 +22,12 @@ Optionally move it to your path:
 sudo mv jays.sh /usr/local/bin/jays
 ```
 
+Or you can just use binmy script manager to install it:
+
+```bash
+binmy jays.sh
+```
+
 ## Usage
 
 Simply run the script in your project directory. Jays automatically detects the repository state and presents the relevant options.

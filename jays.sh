@@ -7,7 +7,7 @@ GUM_OPTS=(--foreground 212 --border-foreground 62 --border rounded --align cente
 GUM_STYLE_SUCCESS=(--foreground 121 --align left --width 40 --margin "1 2")
 GUM_STYLE_INFO=(--foreground 121 --align left --width 40 --margin "1 2")
 GUM_STYLE_ERROR=(--foreground 196 --align left --width 40 --margin "1 2")
-GUM_STYLE_COMMIT=(--border rounded --padding "1 2" --margin "1 0" --foreground 212 --border-foreground 62)
+GUM_STYLE_COMMIT=(--border rounded --padding "1 2" --margin "1 0" --foreground 226 --border-foreground 240)
 
 # Global State
 IS_COLOCATED=false
