@@ -154,12 +154,12 @@ get_commit_message() {
     # Generate default commit message with jjlama
     local default_msg
     default_msg=$(gum spin --spinner dot --title "Generating commit message..." --show-output -- bash -c "jjlama 2>/dev/null" || echo "")
-    
+   
     if [ -n "$default_msg" ]; then
-      echo
-      echo "Generated commit message:"
-      gum style "${GUM_STYLE_COMMIT[@]}" "$default_msg"
-      echo
+      echo >&2
+      echo "Generated commit message:" >&2
+      gum style "${GUM_STYLE_COMMIT[@]}" -- "$default_msg" >&2
+      echo >&2
       
       while true; do
         local choice
@@ -177,13 +177,16 @@ get_commit_message() {
         regenerate)
             default_msg=$(gum spin --spinner dot --title "Regenerating commit message..." --show-output -- bash -c "jjlama 2>/dev/null" || echo "")
             if [ -n "$default_msg" ]; then
-               echo; echo "Generated commit message:"; gum style "${GUM_STYLE_COMMIT[@]}" "$default_msg"; echo
+               echo >&2
+               echo "Generated commit message:" >&2
+               gum style "${GUM_STYLE_COMMIT[@]}" -- "$default_msg" >&2
+               echo >&2
             else
-             echo "❌ Failed to generate message"
-          fi
+               echo "❌ Failed to generate message" >&2
+            fi
           ;;
         cancel)
-          echo "❌ Commit canceled."
+          echo "❌ Commit canceled." >&2
           return 1
           ;;
         esac
@@ -197,7 +200,7 @@ get_commit_message() {
   fi
   
   if [ -z "$message" ]; then
-    echo "No message entered."
+    echo "No message entered." >&2
     return 1
   fi
   

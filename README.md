@@ -163,5 +163,5 @@ which jj gum git gh
 
 ## License
 
-MIT License
+GPLv3 License
 
